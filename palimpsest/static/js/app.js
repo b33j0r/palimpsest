@@ -95,18 +95,46 @@ class CompilerRegistry {
 
 const compilers = new CompilerRegistry();
 
+class FallbackHighlighterRegistry {
+  constructor() {
+    this.highlighters = new Map();
+    this.highlighterOrder = [];
+  }
+
+  register(highlighter) {
+    this.highlighters.set(highlighter.id, highlighter);
+    this.highlighterOrder.push(highlighter);
+  }
+
+  get(id) {
+    return this.highlighters.get(id) || this.highlighters.get("plain");
+  }
+
+  detect(file) {
+    for (const highlighter of this.highlighterOrder) {
+      if (highlighter.match?.(file)) {
+        return highlighter;
+      }
+    }
+    return this.get("plain");
+  }
+}
+
+const fallbackHighlighters = new FallbackHighlighterRegistry();
+
 graph.set("openedFormats", new Map());
 graph.on("editor:file-opened", ({ detail }) => {
   const openedFormats = new Map(graph.get("openedFormats") || []);
-  const modeId = detail.mode.id;
-  const format = openedFormats.get(modeId) || {
-    modeId,
-    label: detail.mode.label,
+  const formatId = detail.format?.id || detail.mode.id;
+  const format = openedFormats.get(formatId) || {
+    formatId,
+    modeId: detail.mode.id,
+    label: detail.format?.label || detail.mode.label,
     paths: new Set(),
   };
   const paths = new Set(format.paths);
   paths.add(detail.file.path);
-  openedFormats.set(modeId, { ...format, paths });
+  openedFormats.set(formatId, { ...format, modeId: detail.mode.id, paths });
   graph.set("openedFormats", openedFormats);
 });
 
@@ -132,7 +160,7 @@ class ModeRegistry {
   }
 
   get(id) {
-    return this.modes.get(id) || this.modes.get("plain");
+    return this.modes.get(id) || this.modes.get("generic");
   }
 
   detect(file, workspace) {
@@ -147,8 +175,8 @@ class ModeRegistry {
 
 const modeRegistry = new ModeRegistry({ graph });
 
-function registerModes() {
-  modeRegistry.register(createTokenMode({
+function registerFallbackHighlighters() {
+  fallbackHighlighters.register(createTokenHighlighter({
     id: "pest",
     label: "Pest",
     adapters: ["pest"],
@@ -160,11 +188,9 @@ function registerModes() {
       keywords: new Set(["SOI", "EOI", "WHITESPACE", "COMMENT", "ANY"]),
       operators: new Set(["{", "}", "(", ")", "[", "]", "=", "|", "*", "+", "?", "~", "!", "@", "_", "$", "^"]),
     },
-    toolbar: pestToolbar,
-    compilerId: "pest-project-format",
   }));
 
-  modeRegistry.register(createTokenMode({
+  fallbackHighlighters.register(createTokenHighlighter({
     id: "lezer",
     label: "Lezer",
     adapters: ["lezer"],
@@ -178,7 +204,7 @@ function registerModes() {
     },
   }));
 
-  modeRegistry.register(createTokenMode({
+  fallbackHighlighters.register(createTokenHighlighter({
     id: "tree-sitter",
     label: "Tree-sitter",
     adapters: ["tree-sitter"],
@@ -186,7 +212,7 @@ function registerModes() {
     grammar: javascriptGrammar(["grammar", "seq", "choice", "repeat", "optional", "token", "prec"]),
   }));
 
-  modeRegistry.register(createTokenMode({
+  fallbackHighlighters.register(createTokenHighlighter({
     id: "rust",
     label: "Rust",
     extensions: [".rs"],
@@ -196,7 +222,7 @@ function registerModes() {
     }),
   }));
 
-  modeRegistry.register(createTokenMode({
+  fallbackHighlighters.register(createTokenHighlighter({
     id: "c",
     label: "C",
     extensions: [".c", ".h"],
@@ -206,7 +232,7 @@ function registerModes() {
     }),
   }));
 
-  modeRegistry.register(createTokenMode({
+  fallbackHighlighters.register(createTokenHighlighter({
     id: "python",
     label: "Python",
     extensions: [".py", ".pyi"],
@@ -216,7 +242,7 @@ function registerModes() {
     }),
   }));
 
-  modeRegistry.register(createTokenMode({
+  fallbackHighlighters.register(createTokenHighlighter({
     id: "scheme",
     label: "Scheme",
     extensions: [".scm", ".ss", ".sls", ".sps", ".rkt"],
@@ -226,7 +252,7 @@ function registerModes() {
     }),
   }));
 
-  modeRegistry.register(createTokenMode({
+  fallbackHighlighters.register(createTokenHighlighter({
     id: "ini",
     label: "INI",
     extensions: [".ini", ".cfg", ".conf", ".toml"],
@@ -239,14 +265,14 @@ function registerModes() {
     },
   }));
 
-  modeRegistry.register(createTokenMode({
+  fallbackHighlighters.register(createTokenHighlighter({
     id: "javascript",
     label: "JavaScript",
     extensions: [".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"],
     grammar: javascriptGrammar(["async", "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "else", "export", "extends", "false", "finally", "for", "from", "function", "if", "import", "in", "instanceof", "let", "new", "null", "return", "static", "super", "switch", "this", "throw", "true", "try", "typeof", "undefined", "var", "void", "while", "yield"]),
   }));
 
-  modeRegistry.register(createTokenMode({
+  fallbackHighlighters.register(createTokenHighlighter({
     id: "css",
     label: "CSS",
     extensions: [".css"],
@@ -256,16 +282,7 @@ function registerModes() {
     }),
   }));
 
-  modeRegistry.register({
-    id: "project-format",
-    label: "Project format",
-    match: (file, workspace, graph) => workspace.syntaxRole === "source" && Boolean(runtimes.get("project-format")?.ready),
-    runtimeIds: () => ["project-format"],
-    highlight: (source) => runtimes.get("project-format")?.highlight(source) || highlightPlain(source),
-    status: () => `${runtimes.get("project-format")?.label || "Project format"} active.`,
-  });
-
-  modeRegistry.register({
+  fallbackHighlighters.register({
     id: "plain",
     label: "Plain text",
     match: () => true,
@@ -273,6 +290,40 @@ function registerModes() {
   });
 }
 
+function registerModes() {
+  modeRegistry.register(createMajorMode({
+    id: "pest",
+    label: "Pest",
+    adapters: ["pest"],
+    extensions: [".pest"],
+    highlighterId: "pest",
+    toolbar: pestToolbar,
+    compilerId: "pest-project-format",
+  }));
+
+  modeRegistry.register({
+    id: "project-format",
+    label: "Project format",
+    match: (file, workspace) =>
+      workspace.syntaxRole === "source" &&
+      Boolean(runtimes.get("project-format")?.ready) &&
+      fallbackHighlighters.detect(file).id === "plain",
+    runtimeIds: () => ["project-format"],
+    highlight: (source) => runtimes.get("project-format")?.highlight(source) || highlightPlain(source),
+    status: () => `${runtimes.get("project-format")?.label || "Project format"} active.`,
+  });
+
+  modeRegistry.register({
+    id: "generic",
+    label: "Generic",
+    match: () => true,
+    format: (file) => fallbackHighlighters.detect(file),
+    highlight: (source, context) => context.format.highlight(source, context),
+    status: (context) => `${context.format.label} mode.`,
+  });
+}
+
+registerFallbackHighlighters();
 registerModes();
 
 class CodeEditor {
@@ -284,7 +335,8 @@ class CodeEditor {
     this.toolbar = toolbar;
     this.onInput = onInput;
     this.file = null;
-    this.mode = modeRegistry.get("plain");
+    this.mode = modeRegistry.get("generic");
+    this.renderContext = {};
     this.pendingRender = false;
 
     this.textarea.addEventListener("input", () => {
@@ -296,7 +348,8 @@ class CodeEditor {
 
   setFile(file, content, mode, context) {
     this.file = file;
-    this.mode = mode || modeRegistry.get("plain");
+    this.mode = mode || modeRegistry.get("generic");
+    this.renderContext = context || {};
     this.textarea.value = content;
     this.title.textContent = `${file.path} (${file.size} B)`;
     this.setStatus(this.mode.status?.(context) || `${this.mode.label} mode.`);
@@ -305,7 +358,8 @@ class CodeEditor {
 
   clear(message) {
     this.file = null;
-    this.mode = modeRegistry.get("plain");
+    this.mode = modeRegistry.get("generic");
+    this.renderContext = {};
     this.textarea.value = "";
     this.highlight.textContent = "";
     this.title.textContent = message;
@@ -333,10 +387,11 @@ class CodeEditor {
     this.toolbar.hidden = true;
   }
 
-  queueRender(context) {
+  queueRender(context = this.renderContext) {
     if (this.pendingRender) {
       return;
     }
+    this.renderContext = context || this.renderContext;
     this.pendingRender = true;
     requestAnimationFrame(() => {
       this.pendingRender = false;
@@ -344,8 +399,9 @@ class CodeEditor {
     });
   }
 
-  render(context = {}) {
-    this.highlight.innerHTML = `${this.mode.highlight(this.textarea.value, context)}\n`;
+  render(context = this.renderContext) {
+    this.renderContext = context || this.renderContext;
+    this.highlight.innerHTML = `${this.mode.highlight(this.textarea.value, this.renderContext)}\n`;
     this.syncScroll();
   }
 
@@ -518,11 +574,12 @@ class EditorWorkspace extends HTMLElement {
     }
   }
 
-  context(file = this.editor.file, mode = this.editor.mode) {
+  context(file = this.editor.file, mode = this.editor.mode, format = this.resolveFormat(file, mode)) {
     return {
       appState,
       compilers,
       file,
+      format,
       graph,
       mode,
       runtimes,
@@ -546,11 +603,12 @@ class EditorWorkspace extends HTMLElement {
 
     const enrichedFile = { ...file, ...this.fileMeta(file.path) };
     const mode = modeRegistry.detect(enrichedFile, this);
-    const context = this.context(enrichedFile, mode);
+    const format = this.resolveFormat(enrichedFile, mode);
+    const context = this.context(enrichedFile, mode, format);
     this.editor.setFile(enrichedFile, file.content, mode, context);
     this.editor.setToolbar(mode.toolbar, context);
     this.browser.markActive();
-    graph.emit("editor:file-opened", { workspace: this, file: enrichedFile, mode });
+    graph.emit("editor:file-opened", { workspace: this, file: enrichedFile, mode, format });
     return true;
   }
 
@@ -593,6 +651,16 @@ class EditorWorkspace extends HTMLElement {
     return grammarFileMap.get(path) || {};
   }
 
+  resolveFormat(file, mode) {
+    if (!file) {
+      return fallbackHighlighters.get("plain");
+    }
+    if (mode?.highlighterId) {
+      return fallbackHighlighters.get(mode.highlighterId);
+    }
+    return mode?.format?.(file) || fallbackHighlighters.detect(file);
+  }
+
   handleInput() {
     graph.emit("editor:changed", {
       workspace: this,
@@ -612,8 +680,10 @@ class EditorWorkspace extends HTMLElement {
 
     const currentRuntimeIds = this.editor.mode.runtimeIds?.(this.context()) || [];
     const mode = modeRegistry.detect(this.editor.file, this);
+    const format = this.resolveFormat(this.editor.file, mode);
+    const context = this.context(this.editor.file, mode, format);
     const modeChanged = mode.id !== this.editor.mode.id;
-    const runtimeApplies = currentRuntimeIds.includes(runtimeId) || (mode.runtimeIds?.(this.context()) || []).includes(runtimeId);
+    const runtimeApplies = currentRuntimeIds.includes(runtimeId) || (mode.runtimeIds?.(context) || []).includes(runtimeId);
 
     if (!modeChanged && !runtimeApplies) {
       return;
@@ -621,10 +691,11 @@ class EditorWorkspace extends HTMLElement {
 
     if (modeChanged) {
       this.editor.mode = mode;
-      this.editor.setStatus(mode.status?.(this.context()) || `${mode.label} mode.`);
-      this.editor.setToolbar(mode.toolbar, this.context());
+      this.editor.renderContext = context;
+      this.editor.setStatus(mode.status?.(context) || `${mode.label} mode.`);
+      this.editor.setToolbar(mode.toolbar, context);
     }
-    this.editor.queueRender(this.context());
+    this.editor.queueRender(context);
     graph.emit("editor:runtime-applied", {
       workspace: this,
       file: this.editor.file,
@@ -694,14 +765,24 @@ compilers.register({
   },
 });
 
-function createTokenMode({ id, label, adapters = [], filenames = [], extensions = [], grammar, toolbar, compilerId }) {
+function createMajorMode({ id, label, adapters = [], filenames = [], extensions = [], highlighterId, toolbar, compilerId }) {
+  return {
+    id,
+    label,
+    match: (file) => adapters.includes(file.adapter) || filenames.includes(file.name) || extensions.includes(file.suffix),
+    highlighterId,
+    highlight: (source, context) => context.format.highlight(source, context),
+    toolbar,
+    compilerId,
+  };
+}
+
+function createTokenHighlighter({ id, label, adapters = [], filenames = [], extensions = [], grammar }) {
   return {
     id,
     label,
     match: (file) => adapters.includes(file.adapter) || filenames.includes(file.name) || extensions.includes(file.suffix),
     highlight: (source) => tokenize(source, grammar),
-    toolbar,
-    compilerId,
   };
 }
 

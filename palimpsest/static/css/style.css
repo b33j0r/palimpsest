@@ -335,9 +335,10 @@ palimpsest-editor-workspace {
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--code-text);
+  color: transparent;
   caret-color: var(--text);
   overflow: auto;
+  -webkit-text-fill-color: transparent;
 }
 
 .code-editor textarea::selection {
