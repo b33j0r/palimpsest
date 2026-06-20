@@ -29,7 +29,9 @@ Open `http://127.0.0.1:5001`.
 - `palimpsest/models.py` contains typed state, file-browser response models, and grammar-file response models.
 - `palimpsest/api.py` serves JSON for app state, directory listings, grammar discovery, and file content.
 - `palimpsest/ui.py` serves the browser UI shell.
-- `palimpsest/static/js/app.js` owns the browser workbench behavior, including reusable editor controllers and pluggable syntax highlighter adapters.
+- `palimpsest/static/js/app.mjs` bootstraps browser modules for editor workspaces, registries, modes, compilers, and fallback highlighters.
+
+Browser code is split by responsibility: `core/` contains signal and registry primitives, `highlight/` contains fallback tokenizers, `modes/` contains major-mode and compiler wiring, and `workspace.mjs` contains the reusable browser/editor custom element.
 
 ## Editor Surface
 

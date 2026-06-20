@@ -1,0 +1,119 @@
+import { loadGrammarMetadata } from "./api.mjs";
+import { SignalGraph } from "./core/signal_graph.mjs";
+import { CompilerRegistry, FallbackHighlighterRegistry, ModeRegistry, RuntimeRegistry } from "./core/registries.mjs";
+import { highlightSourceLike } from "./highlight/tokenizer.mjs";
+import { registerFallbackHighlighters } from "./highlight/fallbacks.mjs";
+import { registerModes } from "./modes/index.mjs";
+import { parentPath } from "./utils/path.mjs";
+import { createEditorWorkspaceClass } from "./workspace.mjs";
+
+const appState = JSON.parse(document.getElementById("app-state").textContent);
+
+let grammarFiles = [];
+let grammarFileMap = new Map();
+
+const graph = new SignalGraph();
+const runtimes = new RuntimeRegistry({ graph });
+const compilers = new CompilerRegistry();
+const fallbackHighlighters = new FallbackHighlighterRegistry();
+const modeRegistry = new ModeRegistry({ graph });
+
+graph.set("openedFormats", new Map());
+graph.on("editor:file-opened", ({ detail }) => {
+  const openedFormats = new Map(graph.get("openedFormats") || []);
+  const formatId = detail.format?.id || detail.mode.id;
+  const format = openedFormats.get(formatId) || {
+    formatId,
+    modeId: detail.mode.id,
+    label: detail.format?.label || detail.mode.label,
+    paths: new Set(),
+  };
+  const paths = new Set(format.paths);
+  paths.add(detail.file.path);
+  openedFormats.set(formatId, { ...format, modeId: detail.mode.id, paths });
+  graph.set("openedFormats", openedFormats);
+});
+
+runtimes.register({
+  id: "project-format",
+  version: 0,
+  grammarPath: "",
+  label: "Project format",
+  highlight: highlightSourceLike,
+  ready: false,
+});
+
+registerFallbackHighlighters(fallbackHighlighters);
+registerModes({
+  modeRegistry,
+  fallbackHighlighters,
+  runtimes,
+  compilers,
+  graph,
+});
+
+customElements.define(
+  "palimpsest-editor-workspace",
+  createEditorWorkspaceClass({
+    appState,
+    compilers,
+    fallbackHighlighters,
+    graph,
+    modeRegistry,
+    runtimes,
+    getGrammarFileMeta: (path) => grammarFileMap.get(path) || {},
+  }),
+);
+
+initializeWorkspaces();
+
+async function initializeWorkspaces() {
+  grammarFiles = await loadGrammarMetadata();
+  grammarFileMap = new Map(grammarFiles.map((file) => [file.path, file]));
+
+  const sourceWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="examples"]');
+  const grammarWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="grammar"]');
+
+  await Promise.all([
+    sourceWorkspace.openDirectory(sourceWorkspace.dataset.startPath || "."),
+    openFirstDirectory(grammarWorkspace, grammarBrowserStartCandidates()),
+  ]);
+
+  if (grammarFiles[0]) {
+    await grammarWorkspace.openFile(grammarFiles[0].path);
+  } else {
+    grammarWorkspace.editor.clear(grammarWorkspace.emptyTitle);
+  }
+}
+
+async function openFirstDirectory(workspace, paths) {
+  for (const path of paths) {
+    if (await workspace.openDirectory(path)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function grammarBrowserStartCandidates() {
+  const startPath = grammarBrowserStartPath();
+  const candidates = [startPath];
+  const parent = parentPath(startPath);
+
+  if (parent !== null) {
+    candidates.push(parent);
+  }
+  candidates.push(".");
+
+  return [...new Set(candidates)];
+}
+
+function grammarBrowserStartPath() {
+  if (grammarFiles.length) {
+    return parentPath(grammarFiles[0].path) || ".";
+  }
+  if (appState.grammar_files.length) {
+    return appState.grammar_files[0];
+  }
+  return ".";
+}

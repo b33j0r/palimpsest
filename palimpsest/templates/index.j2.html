@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Palimpsest</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=fallback-highlighters-1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=modules-1">
 </head>
-<body data-build="fallback-highlighters-1">
+<body data-build="modules-1">
 <script type="application/json" id="app-state">{{ state | tojson }}</script>
 <template id="editor-workspace-template">
     <aside class="group-sidebar">
@@ -88,6 +88,6 @@
         data-syntax-role="grammar"
     ></palimpsest-editor-workspace>
 </main>
-<script src="{{ url_for('static', filename='js/app.js') }}?v=fallback-highlighters-1"></script>
+<script type="module" src="{{ url_for('static', filename='js/app.mjs') }}?v=modules-1"></script>
 </body>
 </html>
