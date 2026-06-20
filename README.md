@@ -1,32 +1,6 @@
 # Palimpsest
 
-Palimpsest is a workbench for designing language grammars against real project files. It is meant to point at an actual project directory, read a small `palimpsest.toml`, browse that project's examples, and grow into a live syntax-highlighting preview while the grammar changes.
-
-Currently, a project dir's `palimpsest.toml` can declare where examples live, how parsers are built, and which filetypes use those parsers:
-
-```toml
-examples_dir = "./examples"
-
-[[parsers.mscm]]
-adapter = "pest"
-grammar_files = ["./crates/parser/*.pest"]
-highlight_captures = { rule = "function", string = "string" }
-
-[parsers.mscm.build]
-command = "cargo build -p parser-wasm"
-outputs = ["./target/parser.wasm"]
-
-[[filetypes.mscm]]
-extensions = ["*.mscm"]
-parser = "mscm"
-highlight_captures = { symbol = "variable", number = "number" }
-```
-
-Legacy top-level `grammar_files` is still accepted. During the transition, `grammar_files` can also live directly under a `[[filetypes.name]]` table; the filetype name is treated as the parser id. Grammar file paths accept files, directories, and simple glob patterns such as `./crates/parser/*.pest`. The app currently registers adapter IDs for:
-
-- `pest`: `.pest`
-- `tree-sitter`: `grammar.js`, `grammar.json`, `.scm`
-- `lezer`: `.grammar`
+Palimpsest is a browser workbench for developing language grammars against real project files. Point it at a project with a `palimpsest.toml`, browse example files and grammar files side by side, edit either one, and wire custom parsers/highlighters into the editor loop.
 
 ## Run
 
@@ -36,34 +10,60 @@ uv run flask --app palimpsest.app run --port 5001
 
 Open `http://127.0.0.1:5001`.
 
-## Shape
+## Project Config
 
-- `palimpsest/config.py` loads and validates project configuration with Pydantic.
-- `palimpsest/models.py` contains typed state, file-browser response models, and grammar-file response models.
-- `palimpsest/api.py` serves JSON for app state, directory listings, grammar discovery, and file content.
-- `palimpsest/ui.py` serves the browser UI shell.
-- `palimpsest/static/js/app.mjs` bootstraps browser modules for editor workspaces, registries, modes, compilers, and fallback highlighters.
+A project config declares examples, parser definitions, and filetypes that use those parsers:
 
-Browser code is split by responsibility: `core/` contains signal and registry primitives, `highlight/` contains fallback tokenizers, `modes/` contains major-mode and compiler wiring, and `workspace.mjs` contains the reusable browser/editor custom element.
+```toml
+examples_dir = "./examples"
 
-## Editor Surface
+[[parsers.mscm]]
+adapter = "pest"
+grammar_files = ["./crates/parser/src/*.pest"]
+highlight_captures = { rule = "function", string = "string", number = "number" }
 
-The UI top level is a fixed left-to-right grid with five physical columns:
+[parsers.mscm.build]
+command = "cargo build -p parser"
+outputs = ["./target/parser.wasm"]
 
-- Config pane showing the active project root and configured paths.
-- Examples file-browser sidebar.
+[[filetypes.mscm]]
+extensions = ["*.mscm"]
+parser = "mscm"
+highlight_captures = { symbol = "variable", keyword = "keyword" }
+```
+
+`grammar_files` accepts files, directories, and glob patterns, including recursive patterns like `./crates/parser/**/*.pest`. Top-level `grammar_files` is still accepted for older configs. During the transition, a `[[filetypes.name]]` table may also contain `grammar_files`; in that case the filetype name is treated as the parser id.
+
+`highlight_captures` maps parser output captures to standard editor token classes. Useful targets include `comment`, `string`, `keyword`, `number`, `function`, `method`, `type`, `constructor`, `variable`, `property`, `attribute`, `constant`, `operator`, `punctuation`, and `tag`. Dotted captures follow Tree-sitter-style naming by becoming dash-separated token classes, for example `punctuation.delimiter` maps to `tok-punctuation-delimiter`.
+
+## Workbench
+
+The UI is a fixed five-column workbench:
+
+- Project/config pane.
+- Examples file browser.
 - Example editor.
-- Grammar-file sidebar.
+- Grammar file browser.
 - Grammar editor.
 
-The examples and grammar surfaces are two instances of the same browser/editor workspace component, initialized with different starting paths and syntax roles. Both file-browser sidebars show a flat directory listing. Directories open in-place as the sidebar's current directory, and a `..` row lets either browser move upward until it reaches the project root. There is no full-width workspace header and there are no alternate-layout media queries yet; the current layout is intentionally fixed while the core editor grouping is being built.
+The two browser/editor pairs are instances of the same custom element. Both file browsers are flat directory views: directories open in place, and `..` moves upward until the project root.
 
-## Modes and Highlighting
+## Modes And Highlighting
 
-Each editor resolves a major mode through the browser-side mode registry when a file opens. Major modes own editor behavior, toolbar controls, compiler hooks, and runtime dependencies. Syntax highlighting is a separate fallback-highlighter registry used by the generic major mode and by specialized modes that need editor behavior without custom tokenization. Built-in fallback highlighters currently cover Pest, Lezer, Tree-sitter grammar files, Rust, C, Python, Scheme, INI/TOML-style config, JavaScript/TypeScript, CSS, and plain text.
+Editors resolve a major mode when a file opens. Major modes own behavior: toolbars, compiler hooks, and runtime dependencies. Syntax coloring is separate: most files use the generic major mode plus the fallback highlighter registry.
 
-Modes can optionally render a toolbar and declare a compiler. The Pest major mode uses the fallback Pest highlighter plus `Compile` and `Autocompile` controls. Compilation runs through a compiler registry, updates a browser-side project-format runtime, and emits graph signals; later backends can replace that compiler with Pest/nom/WASM or server-side work while keeping the editor/workspace contract the same.
+That fallback registry is extensible and config-aware. It includes lightweight built-in tokenizers for common formats such as Rust, C, Python, Scheme, INI/TOML-style config, JavaScript/TypeScript, CSS, Pest, Lezer, Tree-sitter grammar files, and plain text. Configured filetypes such as `*.mscm` are also registered, so project-defined languages participate in the same mode/highlighter pipeline instead of being hardcoded into the app.
 
-The UI has a small signal graph for dataflow-style updates. Editor open/change/save events, runtime changes, and grammar compile events flow through that graph, and opened files are captured by resolved mode so format-specific behavior has a single registry-facing hook. Modes can declare runtime dependencies; when a runtime changes, open editors re-resolve their mode and re-render only when the runtime applies. When a Pest grammar compiles, open source editors can switch to the project-format mode and reload against the updated runtime, which is the path toward live custom parser/highlighter reloads.
+The Pest major mode currently provides `Compile` and `Autocompile` controls. Compilation is wired through a browser-side compiler registry and updates a parser-scoped runtime such as `parser:mscm`; later server-side or WASM parser builds can replace that compiler implementation without changing editor/workspace contracts.
 
-Parser and filetype `highlight_captures` map parser output captures to standard token classes. Capture targets should use stable names such as `comment`, `string`, `keyword`, `number`, `function`, `method`, `type`, `constructor`, `variable`, `property`, `attribute`, `constant`, `operator`, `punctuation`, and `tag`. Dotted capture names can be rendered as dash-separated token classes, matching Tree-sitter conventions such as `punctuation.delimiter` to `tok-punctuation-delimiter`.
+## Code Shape
+
+- `palimpsest/config.py` loads and validates `palimpsest.toml`.
+- `palimpsest/models.py` defines typed API response models.
+- `palimpsest/api.py` serves app state, directory listings, grammar discovery, and file content.
+- `palimpsest/ui.py` serves the HTML shell.
+- `palimpsest/static/js/app.mjs` bootstraps the browser workbench.
+- `palimpsest/static/js/core/` contains signal and registry primitives.
+- `palimpsest/static/js/highlight/` contains fallback tokenizers.
+- `palimpsest/static/js/modes/` contains major-mode and compiler wiring.
+- `palimpsest/static/js/workspace.mjs` contains the reusable browser/editor custom element.
