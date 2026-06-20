@@ -41,6 +41,6 @@ The UI top level is a fixed left-to-right grid with five physical columns:
 - Grammar-file sidebar.
 - Grammar editor.
 
-The examples sidebar/editor and grammar sidebar/editor are logical groups by adjacency and ARIA labeling, not nested layout containers. There is no full-width workspace header and there are no alternate-layout media queries yet; the current layout is intentionally fixed while the core editor grouping is being built.
+The examples and grammar surfaces are two instances of the same browser/editor workspace component, initialized with different starting paths and syntax roles. Both file-browser sidebars show a flat directory listing. Directories open in-place as the sidebar's current directory, and a `..` row lets either browser move upward until it reaches the project root. There is no full-width workspace header and there are no alternate-layout media queries yet; the current layout is intentionally fixed while the core editor grouping is being built.
 
 The current highlighters are lightweight browser-side adapters. They are intentionally registered by adapter ID so later Pest, Tree-sitter, or Lezer integrations can replace the highlighting and parsing behavior without changing the editor layout.

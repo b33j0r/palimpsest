@@ -1,22 +1,10 @@
 const appState = JSON.parse(document.getElementById("app-state").textContent);
 
-const elements = {
-  currentPath: document.getElementById("current-path"),
-  fileList: document.getElementById("file-list"),
-  parentButton: document.getElementById("parent-button"),
-  grammarList: document.getElementById("grammar-list"),
-  saveGrammarButton: document.getElementById("save-grammar-button"),
-  saveExampleButton: document.getElementById("save-example-button"),
-  grammarTitle: document.getElementById("grammar-title"),
-  exampleTitle: document.getElementById("example-title"),
-  grammarStatus: document.getElementById("grammar-status"),
-  exampleStatus: document.getElementById("example-status"),
-};
-
-let browserPath = appState.examples_dir;
-let examplesBrowserRoot = null;
 let grammarFiles = [];
-let activeGrammar = null;
+let grammarFileMap = new Map();
+let activeGrammarAdapter = "plain";
+let sourceWorkspace = null;
+let grammarWorkspace = null;
 
 const highlighters = new Map();
 
@@ -53,16 +41,20 @@ registerHighlighter({
 });
 
 class CodeEditor {
-  constructor({ textareaId, highlightId, title, status, getAdapter }) {
-    this.textarea = document.getElementById(textareaId);
-    this.highlight = document.getElementById(highlightId);
+  constructor({ textarea, highlight, title, status, getHighlighter, onInput }) {
+    this.textarea = textarea;
+    this.highlight = highlight;
     this.title = title;
     this.status = status;
-    this.getAdapter = getAdapter;
+    this.getHighlighter = getHighlighter;
+    this.onInput = onInput;
     this.file = null;
     this.pendingRender = false;
 
-    this.textarea.addEventListener("input", () => this.queueRender());
+    this.textarea.addEventListener("input", () => {
+      this.queueRender();
+      this.onInput?.(this);
+    });
     this.textarea.addEventListener("scroll", () => this.syncScroll());
   }
 
@@ -94,7 +86,7 @@ class CodeEditor {
   }
 
   render() {
-    const highlighter = this.getAdapter() || highlighters.get("plain").highlightSource;
+    const highlighter = this.getHighlighter() || highlighters.get("plain").highlightSource;
     this.highlight.innerHTML = `${highlighter(this.textarea.value)}\n`;
     this.syncScroll();
   }
@@ -109,26 +101,238 @@ class CodeEditor {
   }
 }
 
-const grammarEditor = new CodeEditor({
-  textareaId: "grammar-editor",
-  highlightId: "grammar-highlight",
-  title: elements.grammarTitle,
-  status: elements.grammarStatus,
-  getAdapter: () => (highlighters.get(activeGrammar?.adapter) || highlighters.get("plain")).highlightGrammar,
-});
+class FileBrowser {
+  constructor({ pathElement, listElement, onOpenDirectory, onOpenFile, getActivePath }) {
+    this.path = ".";
+    this.pathElement = pathElement;
+    this.listElement = listElement;
+    this.onOpenDirectory = onOpenDirectory;
+    this.onOpenFile = onOpenFile;
+    this.getActivePath = getActivePath;
+  }
 
-const exampleEditor = new CodeEditor({
-  textareaId: "example-editor",
-  highlightId: "example-highlight",
-  title: elements.exampleTitle,
-  status: elements.exampleStatus,
-  getAdapter: () => (highlighters.get(activeGrammar?.adapter) || highlighters.get("plain")).highlightSource,
-});
+  async open(path) {
+    this.path = path;
+    this.pathElement.textContent = "Loading...";
+    this.listElement.replaceChildren();
 
-grammarEditor.textarea.addEventListener("input", () => {
-  exampleEditor.queueRender();
-  grammarEditor.setStatus("Grammar changed in memory.");
-});
+    const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+    if (!response.ok) {
+      this.pathElement.textContent = "Unable to load directory";
+      return false;
+    }
+
+    const listing = await response.json();
+    this.path = listing.path;
+    this.pathElement.textContent = listing.path;
+    this.render(listing.entries);
+    return true;
+  }
+
+  render(entries) {
+    this.listElement.replaceChildren();
+    const parent = parentPath(this.path);
+
+    if (parent !== null) {
+      this.renderEntry({
+        name: "..",
+        path: parent,
+        kind: "directory",
+        size: null,
+        suffix: "",
+      });
+    }
+
+    if (!entries.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty-list";
+      empty.textContent = "No files";
+      this.listElement.append(empty);
+      return;
+    }
+
+    for (const entry of entries) {
+      this.renderEntry(entry);
+    }
+
+    this.markActive();
+  }
+
+  renderEntry(entry) {
+    const row = document.createElement("button");
+    row.className = "file-row";
+    row.type = "button";
+    row.dataset.kind = entry.kind;
+    row.dataset.path = entry.path;
+
+    if (entry.kind === "directory") {
+      row.addEventListener("click", () => this.onOpenDirectory(entry.path));
+    } else {
+      row.addEventListener("click", () => this.onOpenFile(entry.path));
+    }
+
+    const kind = document.createElement("span");
+    kind.className = "file-kind";
+    kind.textContent = fileKindLabel(entry);
+
+    const name = document.createElement("span");
+    name.className = "file-name";
+    name.textContent = entry.name;
+
+    const size = document.createElement("span");
+    size.className = "file-size";
+    size.textContent = entry.size === null ? "" : `${entry.size} B`;
+
+    row.append(kind, name, size);
+    this.listElement.append(row);
+  }
+
+  markActive() {
+    const activePath = this.getActivePath?.();
+    for (const row of this.listElement.querySelectorAll(".file-row")) {
+      if (activePath && row.dataset.path === activePath) {
+        row.setAttribute("aria-current", "true");
+      } else {
+        row.removeAttribute("aria-current");
+      }
+    }
+  }
+}
+
+class EditorWorkspace extends HTMLElement {
+  connectedCallback() {
+    if (this.browser) {
+      return;
+    }
+
+    const template = document.getElementById("editor-workspace-template");
+    this.append(template.content.cloneNode(true));
+
+    this.syntaxRole = this.dataset.syntaxRole || "source";
+    this.emptyTitle = this.dataset.emptyTitle || "No file selected";
+
+    const browserTitle = this.querySelector("[data-browser-title]");
+    const editorTitle = this.querySelector("[data-editor-title]");
+    const sidebar = this.querySelector(".group-sidebar");
+    const editorPane = this.querySelector(".editor-pane");
+    const textarea = this.querySelector("[data-editor]");
+
+    browserTitle.id = `${this.dataset.workspace}-browser-title`;
+    editorTitle.id = `${this.dataset.workspace}-editor-title`;
+    sidebar.dataset.region = this.dataset.workspace;
+    sidebar.setAttribute("aria-labelledby", browserTitle.id);
+    editorPane.dataset.region = this.dataset.workspace;
+    editorPane.setAttribute("aria-labelledby", editorTitle.id);
+
+    this.querySelector("[data-browser-eyebrow]").textContent = this.dataset.browserEyebrow || "";
+    browserTitle.textContent = this.dataset.browserTitle || "Files";
+    this.querySelector("[data-editor-eyebrow]").textContent = this.dataset.editorEyebrow || "";
+    editorTitle.textContent = this.dataset.editorTitle || "Editor";
+    this.querySelector("[data-source-title]").textContent = this.emptyTitle;
+    textarea.setAttribute("aria-label", this.dataset.editorLabel || "Source");
+
+    this.editor = new CodeEditor({
+      textarea,
+      highlight: this.querySelector("[data-highlight]"),
+      title: this.querySelector("[data-source-title]"),
+      status: this.querySelector("[data-status]"),
+      getHighlighter: () => this.currentHighlighter(),
+      onInput: () => this.handleInput(),
+    });
+
+    this.browser = new FileBrowser({
+      pathElement: this.querySelector("[data-path]"),
+      listElement: this.querySelector("[data-file-list]"),
+      onOpenDirectory: (path) => this.openDirectory(path),
+      onOpenFile: (path) => this.openFile(path),
+      getActivePath: () => this.editor.file?.path,
+    });
+
+    this.querySelector("[data-save-button]").addEventListener("click", () => this.save());
+  }
+
+  async openDirectory(path) {
+    return this.browser.open(path);
+  }
+
+  async openFile(path) {
+    const fileMeta = this.fileMeta(path);
+    this.editor.clear(path);
+    this.browser.markActive();
+
+    const file = await fetchFile(path, this.editor);
+    if (!file) {
+      return false;
+    }
+
+    const adapter = fileMeta.adapter || detectAdapter(file.path);
+    this.editor.setFile({ ...file, adapter }, file.content);
+    this.browser.markActive();
+    this.afterOpenFile(adapter);
+    return true;
+  }
+
+  async save() {
+    if (!this.editor.file) {
+      this.editor.setStatus("No file selected.");
+      return;
+    }
+
+    this.editor.setStatus("Saving...");
+    const response = await fetch("/api/file", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        path: this.editor.file.path,
+        content: this.editor.textarea.value,
+      }),
+    });
+
+    if (!response.ok) {
+      this.editor.setStatus("Save failed.");
+      return;
+    }
+
+    const file = await response.json();
+    this.editor.file = { ...this.editor.file, ...file };
+    this.editor.title.textContent = `${file.path} (${file.size} B)`;
+    this.editor.setStatus("Saved.");
+    this.browser.markActive();
+  }
+
+  currentHighlighter() {
+    const adapterId = this.syntaxRole === "grammar" ? this.editor.file?.adapter : activeGrammarAdapter;
+    const adapter = highlighters.get(adapterId) || highlighters.get("plain");
+    return this.syntaxRole === "grammar" ? adapter.highlightGrammar : adapter.highlightSource;
+  }
+
+  fileMeta(path) {
+    return grammarFileMap.get(path) || {};
+  }
+
+  afterOpenFile(adapter) {
+    if (this.syntaxRole !== "grammar") {
+      return;
+    }
+
+    activeGrammarAdapter = adapter || "plain";
+    this.editor.setStatus(`${adapterLabel(activeGrammarAdapter)} adapter active.`);
+    sourceWorkspace?.editor.queueRender();
+  }
+
+  handleInput() {
+    if (this.syntaxRole !== "grammar") {
+      return;
+    }
+
+    this.editor.setStatus("Grammar changed in memory.");
+    sourceWorkspace?.editor.queueRender();
+  }
+}
+
+customElements.define("palimpsest-editor-workspace", EditorWorkspace);
 
 function parentPath(path) {
   const cleanPath = path === "." ? "" : path.replace(/\/+$/, "");
@@ -140,226 +344,39 @@ function parentPath(path) {
   return parts.length ? parts.join("/") : ".";
 }
 
-async function loadDirectory(path) {
-  browserPath = path;
-  elements.currentPath.textContent = "Loading...";
-  elements.fileList.replaceChildren();
-
-  const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
-  if (!response.ok) {
-    elements.currentPath.textContent = "Unable to load directory";
-    return;
+function grammarBrowserStartPath() {
+  if (grammarFiles.length) {
+    return parentPath(grammarFiles[0].path) || ".";
   }
-
-  const listing = await response.json();
-  browserPath = listing.path;
-  examplesBrowserRoot = examplesBrowserRoot || listing.path;
-  elements.currentPath.textContent = listing.path;
-  updateParentButton(listing.path);
-  renderEntries(listing.entries);
+  if (appState.grammar_files.length) {
+    return appState.grammar_files[0];
+  }
+  return ".";
 }
 
-function updateParentButton(path) {
-  const canGoParent = parentPath(path) !== null;
-  const canCollapseToExamples = examplesBrowserRoot && path !== examplesBrowserRoot;
-  elements.parentButton.disabled = !canGoParent && !canCollapseToExamples;
-  elements.parentButton.textContent = canGoParent ? "^" : "v";
-  elements.parentButton.title = canGoParent ? "Parent directory" : "Collapse to examples";
-  elements.parentButton.setAttribute("aria-label", elements.parentButton.title);
+function grammarBrowserStartCandidates() {
+  const startPath = grammarBrowserStartPath();
+  const candidates = [startPath];
+  const parent = parentPath(startPath);
+
+  if (parent !== null) {
+    candidates.push(parent);
+  }
+  candidates.push(".");
+
+  return [...new Set(candidates)];
 }
 
-function renderEntries(entries) {
-  elements.fileList.replaceChildren();
-
-  if (!entries.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-list";
-    empty.textContent = "No files";
-    elements.fileList.append(empty);
-    return;
-  }
-
-  for (const entry of entries) {
-    renderEntry(entry, elements.fileList, 0);
-  }
-}
-
-function renderEntry(entry, container, depth) {
-  const row = document.createElement("button");
-  row.className = "file-row";
-  row.type = "button";
-  row.dataset.kind = entry.kind;
-  row.dataset.path = entry.path;
-  row.style.setProperty("--depth", depth);
-
-  if (entry.kind === "directory") {
-    row.setAttribute("aria-expanded", "false");
-    row.addEventListener("click", () => toggleDirectory(row, entry, depth));
-  } else {
-    row.addEventListener("click", () => loadExampleFile(entry.path));
-  }
-
-  const kind = document.createElement("span");
-  kind.className = "file-kind";
-  kind.textContent = fileKindLabel(entry, false);
-
-  const name = document.createElement("span");
-  name.className = "file-name";
-  name.textContent = entry.name;
-
-  const size = document.createElement("span");
-  size.className = "file-size";
-  size.textContent = entry.size === null ? "" : `${entry.size} B`;
-
-  row.append(kind, name, size);
-  container.append(row);
-}
-
-async function toggleDirectory(row, entry, depth) {
-  const expanded = row.getAttribute("aria-expanded") === "true";
-  const existingChildren = row.nextElementSibling;
-
-  if (expanded) {
-    row.setAttribute("aria-expanded", "false");
-    row.querySelector(".file-kind").textContent = fileKindLabel(entry, false);
-    if (existingChildren?.classList.contains("file-children")) {
-      existingChildren.remove();
-    }
-    return;
-  }
-
-  row.setAttribute("aria-expanded", "true");
-  row.querySelector(".file-kind").textContent = fileKindLabel(entry, true);
-
-  if (existingChildren?.classList.contains("file-children")) {
-    return;
-  }
-
-  const childContainer = document.createElement("div");
-  childContainer.className = "file-children";
-  childContainer.textContent = "Loading...";
-  row.after(childContainer);
-
-  const response = await fetch(`/api/files?path=${encodeURIComponent(entry.path)}`);
-  if (!response.ok) {
-    childContainer.textContent = "Unable to load directory";
-    return;
-  }
-
-  const listing = await response.json();
-  childContainer.replaceChildren();
-  if (!listing.entries.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-list";
-    empty.textContent = "No files";
-    childContainer.append(empty);
-    return;
-  }
-
-  for (const childEntry of listing.entries) {
-    renderEntry(childEntry, childContainer, depth + 1);
-  }
-}
-
-function fileKindLabel(entry, expanded) {
-  if (entry.kind === "directory") {
-    return expanded ? "-DIR" : "+DIR";
-  }
-  return (entry.suffix || "FILE").replace(".", "").toUpperCase();
-}
-
-async function loadGrammarList() {
-  elements.grammarList.replaceChildren();
-  grammarEditor.clear("Loading grammar files...");
-
+async function loadGrammarMetadata() {
   const response = await fetch("/api/grammars");
   if (!response.ok) {
-    grammarEditor.clear("Unable to load grammar files");
+    grammarFiles = [];
+    grammarFileMap = new Map();
     return;
   }
 
   grammarFiles = await response.json();
-  if (!grammarFiles.length) {
-    grammarEditor.clear("No grammar files configured");
-    renderEmptyGrammarList();
-    return;
-  }
-
-  renderGrammarEntries();
-  await loadGrammarFile(grammarFiles[0].path);
-}
-
-function renderEmptyGrammarList() {
-  elements.grammarList.replaceChildren();
-  const empty = document.createElement("p");
-  empty.className = "empty-list";
-  empty.textContent = "No grammar files";
-  elements.grammarList.append(empty);
-}
-
-function renderGrammarEntries() {
-  elements.grammarList.replaceChildren();
-
-  for (const file of grammarFiles) {
-    const row = document.createElement("button");
-    row.className = "file-row";
-    row.type = "button";
-    row.dataset.kind = "file";
-    row.dataset.path = file.path;
-    row.addEventListener("click", () => loadGrammarFile(file.path));
-
-    const kind = document.createElement("span");
-    kind.className = "file-kind";
-    kind.textContent = file.adapter.toUpperCase();
-
-    const name = document.createElement("span");
-    name.className = "file-name";
-    name.textContent = file.name;
-
-    const size = document.createElement("span");
-    size.className = "file-size";
-    size.textContent = `${file.size} B`;
-
-    row.append(kind, name, size);
-    elements.grammarList.append(row);
-  }
-}
-
-async function loadGrammarFile(path) {
-  activeGrammar = grammarFiles.find((file) => file.path === path) || null;
-  markActiveGrammar(path);
-  grammarEditor.clear(path);
-
-  const file = await fetchFile(path, grammarEditor);
-  if (!file) {
-    return;
-  }
-
-  activeGrammar = activeGrammar || {
-    path: file.path,
-    adapter: "plain",
-  };
-  grammarEditor.setFile({ ...file, adapter: activeGrammar.adapter }, file.content);
-  grammarEditor.setStatus(`${adapterLabel(activeGrammar.adapter)} adapter active.`);
-  exampleEditor.queueRender();
-}
-
-function markActiveGrammar(path) {
-  for (const row of elements.grammarList.querySelectorAll(".file-row")) {
-    if (row.dataset.path === path) {
-      row.setAttribute("aria-current", "true");
-    } else {
-      row.removeAttribute("aria-current");
-    }
-  }
-}
-
-async function loadExampleFile(path) {
-  exampleEditor.clear(path);
-  const file = await fetchFile(path, exampleEditor);
-  if (file) {
-    exampleEditor.setFile(file, file.content);
-  }
+  grammarFileMap = new Map(grammarFiles.map((file) => [file.path, file]));
 }
 
 async function fetchFile(path, editor) {
@@ -371,37 +388,58 @@ async function fetchFile(path, editor) {
   return response.json();
 }
 
-async function saveEditor(editor) {
-  if (!editor.file) {
-    editor.setStatus("No file selected.");
-    return;
+function detectAdapter(path) {
+  const name = path.split("/").pop() || "";
+  if (name === "grammar.js" || name === "grammar.json" || path.endsWith(".scm")) {
+    return "tree-sitter";
   }
-
-  editor.setStatus("Saving...");
-  const response = await fetch("/api/file", {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      path: editor.file.path,
-      content: editor.textarea.value,
-    }),
-  });
-
-  if (!response.ok) {
-    editor.setStatus("Save failed.");
-    return;
+  if (path.endsWith(".pest")) {
+    return "pest";
   }
+  if (path.endsWith(".grammar")) {
+    return "lezer";
+  }
+  return "plain";
+}
 
-  const file = await response.json();
-  editor.file = file;
-  editor.title.textContent = `${file.path} (${file.size} B)`;
-  editor.setStatus("Saved.");
+function fileKindLabel(entry) {
+  if (entry.kind === "directory") {
+    return "DIR";
+  }
+  return (entry.suffix || "FILE").replace(".", "").toUpperCase();
 }
 
 function adapterLabel(adapterId) {
   return highlighters.get(adapterId)?.label || adapterId;
+}
+
+async function initializeWorkspaces() {
+  await loadGrammarMetadata();
+
+  sourceWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="examples"]');
+  grammarWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="grammar"]');
+
+  await Promise.all([
+    sourceWorkspace.openDirectory(sourceWorkspace.dataset.startPath || "."),
+    openFirstDirectory(grammarWorkspace, grammarBrowserStartCandidates()),
+  ]);
+
+  if (grammarFiles[0]) {
+    await grammarWorkspace.openFile(grammarFiles[0].path);
+  } else {
+    grammarWorkspace.editor.clear(grammarWorkspace.emptyTitle);
+  }
+}
+
+initializeWorkspaces();
+
+async function openFirstDirectory(workspace, paths) {
+  for (const path of paths) {
+    if (await workspace.openDirectory(path)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function highlightPlain(source) {
@@ -575,20 +613,3 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 }
-
-elements.parentButton.addEventListener("click", () => {
-  const nextPath = parentPath(browserPath);
-  if (nextPath !== null) {
-    loadDirectory(nextPath);
-    return;
-  }
-  if (examplesBrowserRoot && browserPath !== examplesBrowserRoot) {
-    loadDirectory(examplesBrowserRoot);
-  }
-});
-
-elements.saveGrammarButton.addEventListener("click", () => saveEditor(grammarEditor));
-elements.saveExampleButton.addEventListener("click", () => saveEditor(exampleEditor));
-
-loadDirectory(browserPath);
-loadGrammarList();

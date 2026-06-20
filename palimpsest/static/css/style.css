@@ -63,6 +63,10 @@ h2 {
   min-height: 0;
 }
 
+palimpsest-editor-workspace {
+  display: contents;
+}
+
 .config-pane {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -225,13 +229,6 @@ h2 {
   color: var(--text);
   text-align: left;
   cursor: pointer;
-}
-
-.file-children {
-  display: grid;
-  align-content: start;
-  color: var(--muted);
-  font-size: 0.78rem;
 }
 
 .file-row:hover,
