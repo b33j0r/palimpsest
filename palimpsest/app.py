@@ -1,19 +1,22 @@
-from flask import Flask, Blueprint, render_template
+from flask import Flask
 
+from palimpsest.api import create_api_blueprint
 from palimpsest.config import get_config
-
-config = get_config()
-
-app = Flask(__name__)
-app.config.from_object(config)
+from palimpsest.ui import create_ui_blueprint
 
 
-@app.route("/")
-def index():
-    return render_template("index.j2.html", app_name="Palimpsest")
+def create_app(**config_overrides):
+    config = get_config(**config_overrides)
+    app = Flask(__name__)
+    app.config["PALIMPSEST"] = config
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+    app.register_blueprint(create_api_blueprint(config))
+    app.register_blueprint(create_ui_blueprint(config))
+    return app
 
 
 def main():
+    app = create_app()
     app.run()
 
 

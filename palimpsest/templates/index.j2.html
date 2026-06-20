@@ -1,11 +1,96 @@
-<!-- palimpsest/templates/index.html -->
 <!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Palimpsest</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=editor-columns-8">
 </head>
-<body>
-    <h1>Hello from {{ app_name }}</h1>
+<body data-build="editor-columns-8">
+<script type="application/json" id="app-state">{{ state | tojson }}</script>
+<main class="app-shell" aria-label="Grammar and example editors">
+    <aside class="config-pane" aria-labelledby="config-title">
+        <header class="config-header">
+            <div class="brand">
+                <span class="brand-mark">P</span>
+                <h1 id="config-title">{{ app_name }}</h1>
+            </div>
+        </header>
+        <dl class="workspace-meta">
+            <div>
+                <dt>cwd</dt>
+                <dd>{{ state.cwd }}</dd>
+            </div>
+            <div>
+                <dt>config</dt>
+                <dd>{{ state.config_path }}</dd>
+            </div>
+            <div>
+                <dt>examples</dt>
+                <dd>{{ state.examples_dir }}</dd>
+            </div>
+            <div>
+                <dt>grammar files</dt>
+                <dd>{{ state.grammar_files | join(", ") if state.grammar_files else "not configured" }}</dd>
+            </div>
+        </dl>
+    </aside>
+
+    <aside class="group-sidebar" aria-labelledby="browser-title" data-region="examples">
+        <header class="pane-header">
+            <div>
+                <p class="eyebrow">Examples</p>
+                <h2 id="browser-title">Files</h2>
+            </div>
+            <button class="icon-button" id="parent-button" type="button" title="Parent directory" aria-label="Parent directory">^</button>
+        </header>
+        <div class="path-bar" id="current-path"></div>
+        <div class="file-list" id="file-list" role="list"></div>
+    </aside>
+
+    <section class="editor-pane" aria-labelledby="example-editor-title" data-region="examples">
+        <header class="pane-header">
+            <div>
+                <p class="eyebrow">Example</p>
+                <h2 id="example-editor-title">Example Editor</h2>
+            </div>
+            <button class="text-button" id="save-example-button" type="button">Save</button>
+        </header>
+        <p class="source-title" id="example-title">No example selected</p>
+        <div class="code-editor" data-editor="example">
+            <pre class="highlight-surface" aria-hidden="true"><code id="example-highlight"></code></pre>
+            <textarea id="example-editor" aria-label="Example source" spellcheck="false"></textarea>
+        </div>
+        <p class="editor-status" id="example-status" role="status"></p>
+    </section>
+
+    <aside class="group-sidebar" aria-labelledby="grammar-files-title" data-region="grammar">
+        <header class="pane-header">
+            <div>
+                <p class="eyebrow">Grammars</p>
+                <h2 id="grammar-files-title">Files</h2>
+            </div>
+        </header>
+        <div class="path-bar">Configured grammar sources</div>
+        <div class="file-list" id="grammar-list" role="list"></div>
+    </aside>
+
+    <section class="editor-pane" aria-labelledby="grammar-editor-title" data-region="grammar">
+        <header class="pane-header">
+            <div>
+                <p class="eyebrow">Grammar</p>
+                <h2 id="grammar-editor-title">Grammar Editor</h2>
+            </div>
+            <button class="text-button" id="save-grammar-button" type="button">Save</button>
+        </header>
+        <p class="source-title" id="grammar-title">No grammar selected</p>
+        <div class="code-editor" data-editor="grammar">
+            <pre class="highlight-surface" aria-hidden="true"><code id="grammar-highlight"></code></pre>
+            <textarea id="grammar-editor" aria-label="Grammar source" spellcheck="false"></textarea>
+        </div>
+        <p class="editor-status" id="grammar-status" role="status"></p>
+    </section>
+</main>
+<script src="{{ url_for('static', filename='js/app.js') }}?v=editor-columns-8"></script>
 </body>
 </html>
