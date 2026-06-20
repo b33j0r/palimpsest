@@ -43,4 +43,10 @@ The UI top level is a fixed left-to-right grid with five physical columns:
 
 The examples and grammar surfaces are two instances of the same browser/editor workspace component, initialized with different starting paths and syntax roles. Both file-browser sidebars show a flat directory listing. Directories open in-place as the sidebar's current directory, and a `..` row lets either browser move upward until it reaches the project root. There is no full-width workspace header and there are no alternate-layout media queries yet; the current layout is intentionally fixed while the core editor grouping is being built.
 
-The current highlighters are lightweight browser-side adapters. They are intentionally registered by adapter ID so later Pest, Tree-sitter, or Lezer integrations can replace the highlighting and parsing behavior without changing the editor layout.
+## Modes and Highlighting
+
+Each editor resolves a major mode through the browser-side mode registry when a file opens. Modes match against grammar adapter metadata, exact filenames, and suffixes, then own syntax highlighting and any editor controls they need. Built-in modes currently cover Pest, Lezer, Tree-sitter grammar files, Rust, C, Python, Scheme, INI/TOML-style config, JavaScript/TypeScript, CSS, project-format sources, and plain text.
+
+Modes can optionally render a toolbar. The Pest mode uses this for `Compile` and `Autocompile` controls. Compilation currently updates the browser-side project-format runtime and emits graph signals; later backends can replace that compile step with Pest/nom/WASM work while keeping the editor/workspace contract the same.
+
+The UI has a small signal graph for dataflow-style updates. Editor open/change/save events and grammar compile events flow through that graph, and opened files are captured by resolved mode so format-specific behavior has a single registry-facing hook. When a Pest grammar compiles, open source editors using the project-format mode re-render against the updated runtime, which is the path toward live custom parser/highlighter reloads.

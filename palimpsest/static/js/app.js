@@ -2,53 +2,228 @@ const appState = JSON.parse(document.getElementById("app-state").textContent);
 
 let grammarFiles = [];
 let grammarFileMap = new Map();
-let activeGrammarAdapter = "plain";
 let sourceWorkspace = null;
 let grammarWorkspace = null;
 
-const highlighters = new Map();
+class SignalGraph {
+  constructor() {
+    this.listeners = new Map();
+    this.state = new Map();
+  }
 
-function registerHighlighter(adapter) {
-  highlighters.set(adapter.id, adapter);
+  on(type, listener) {
+    const listeners = this.listeners.get(type) || new Set();
+    listeners.add(listener);
+    this.listeners.set(type, listeners);
+    return () => listeners.delete(listener);
+  }
+
+  emit(type, detail = {}) {
+    const event = { type, detail };
+    for (const listener of this.listeners.get(type) || []) {
+      listener(event);
+    }
+    for (const listener of this.listeners.get("*") || []) {
+      listener(event);
+    }
+  }
+
+  set(key, value) {
+    const previous = this.state.get(key);
+    this.state.set(key, value);
+    this.emit(`${key}:changed`, { key, value, previous });
+  }
+
+  get(key) {
+    return this.state.get(key);
+  }
 }
 
-registerHighlighter({
-  id: "plain",
-  label: "Plain text",
-  highlightGrammar: highlightPlain,
-  highlightSource: highlightPlain,
+const graph = new SignalGraph();
+
+const projectFormatRuntime = {
+  version: 0,
+  grammarPath: "",
+  modeId: "",
+  label: "Project format",
+  highlight: highlightSourceLike,
+};
+
+graph.set("projectFormat", { ...projectFormatRuntime });
+graph.set("openedFormats", new Map());
+graph.on("editor:file-opened", ({ detail }) => {
+  const openedFormats = new Map(graph.get("openedFormats") || []);
+  const modeId = detail.mode.id;
+  const paths = new Set(openedFormats.get(modeId) || []);
+  paths.add(detail.file.path);
+  openedFormats.set(modeId, paths);
+  graph.set("openedFormats", openedFormats);
 });
 
-registerHighlighter({
-  id: "pest",
-  label: "Pest",
-  highlightGrammar: highlightPest,
-  highlightSource: highlightSourceLike,
-});
+class ModeRegistry {
+  constructor({ graph }) {
+    this.graph = graph;
+    this.modes = new Map();
+    this.modeOrder = [];
+  }
 
-registerHighlighter({
-  id: "tree-sitter",
-  label: "Tree-sitter",
-  highlightGrammar: highlightJavaScriptLike,
-  highlightSource: highlightSourceLike,
-});
+  register(mode) {
+    this.modes.set(mode.id, mode);
+    this.modeOrder.push(mode);
+  }
 
-registerHighlighter({
-  id: "lezer",
-  label: "Lezer",
-  highlightGrammar: highlightLezer,
-  highlightSource: highlightSourceLike,
-});
+  get(id) {
+    return this.modes.get(id) || this.modes.get("plain");
+  }
+
+  detect(file, workspace) {
+    for (const mode of this.modeOrder) {
+      if (mode.match?.(file, workspace, this.graph)) {
+        return mode;
+      }
+    }
+    return this.get("plain");
+  }
+}
+
+const modeRegistry = new ModeRegistry({ graph });
+
+function registerModes() {
+  modeRegistry.register(createTokenMode({
+    id: "pest",
+    label: "Pest",
+    adapters: ["pest"],
+    extensions: [".pest"],
+    grammar: {
+      lineComment: "//",
+      strings: new Set(['"', "'"]),
+      ruleAssignment: true,
+      keywords: new Set(["SOI", "EOI", "WHITESPACE", "COMMENT", "ANY"]),
+      operators: new Set(["{", "}", "(", ")", "[", "]", "=", "|", "*", "+", "?", "~", "!", "@", "_", "$", "^"]),
+    },
+    toolbar: pestToolbar,
+  }));
+
+  modeRegistry.register(createTokenMode({
+    id: "lezer",
+    label: "Lezer",
+    adapters: ["lezer"],
+    extensions: [".grammar"],
+    grammar: {
+      lineComment: "@comment",
+      strings: new Set(['"', "'"]),
+      ruleAssignment: true,
+      keywords: new Set(["@top", "@tokens", "@skip", "@detectDelim", "@precedence", "@external"]),
+      operators: new Set(["{", "}", "(", ")", "[", "]", "=", "|", "*", "+", "?", "/", ",", "."]),
+    },
+  }));
+
+  modeRegistry.register(createTokenMode({
+    id: "tree-sitter",
+    label: "Tree-sitter",
+    adapters: ["tree-sitter"],
+    filenames: ["grammar.js", "grammar.json"],
+    grammar: javascriptGrammar(["grammar", "seq", "choice", "repeat", "optional", "token", "prec"]),
+  }));
+
+  modeRegistry.register(createTokenMode({
+    id: "rust",
+    label: "Rust",
+    extensions: [".rs"],
+    grammar: sourceGrammar({
+      lineComment: "//",
+      keywords: ["as", "async", "await", "break", "const", "continue", "crate", "else", "enum", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe", "use", "where", "while"],
+    }),
+  }));
+
+  modeRegistry.register(createTokenMode({
+    id: "c",
+    label: "C",
+    extensions: [".c", ".h"],
+    grammar: sourceGrammar({
+      lineComment: "//",
+      keywords: ["auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "int", "long", "register", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"],
+    }),
+  }));
+
+  modeRegistry.register(createTokenMode({
+    id: "python",
+    label: "Python",
+    extensions: [".py", ".pyi"],
+    grammar: sourceGrammar({
+      lineComment: "#",
+      keywords: ["and", "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif", "else", "except", "False", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "None", "nonlocal", "not", "or", "pass", "raise", "return", "True", "try", "while", "with", "yield"],
+    }),
+  }));
+
+  modeRegistry.register(createTokenMode({
+    id: "scheme",
+    label: "Scheme",
+    extensions: [".scm", ".ss", ".sls", ".sps", ".rkt"],
+    grammar: sourceGrammar({
+      lineComment: ";",
+      keywords: ["and", "begin", "cond", "define", "define-syntax", "delay", "do", "else", "if", "lambda", "let", "let*", "letrec", "or", "quasiquote", "quote", "set!", "syntax-rules", "unless", "when"],
+    }),
+  }));
+
+  modeRegistry.register(createTokenMode({
+    id: "ini",
+    label: "INI",
+    extensions: [".ini", ".cfg", ".conf", ".toml"],
+    grammar: {
+      lineComment: "#",
+      strings: new Set(['"', "'"]),
+      ruleAssignment: true,
+      keywords: new Set(["true", "false", "yes", "no", "on", "off"]),
+      operators: new Set(["=", ":", "[", "]", ".", ","]),
+    },
+  }));
+
+  modeRegistry.register(createTokenMode({
+    id: "javascript",
+    label: "JavaScript",
+    extensions: [".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"],
+    grammar: javascriptGrammar(["async", "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "else", "export", "extends", "false", "finally", "for", "from", "function", "if", "import", "in", "instanceof", "let", "new", "null", "return", "static", "super", "switch", "this", "throw", "true", "try", "typeof", "undefined", "var", "void", "while", "yield"]),
+  }));
+
+  modeRegistry.register(createTokenMode({
+    id: "css",
+    label: "CSS",
+    extensions: [".css"],
+    grammar: sourceGrammar({
+      lineComment: null,
+      keywords: ["@media", "@supports", "@container", "@layer", "@keyframes", "display", "grid", "flex", "block", "none", "absolute", "relative", "fixed", "sticky", "var", "color-mix"],
+    }),
+  }));
+
+  modeRegistry.register({
+    id: "project-format",
+    label: "Project format",
+    match: (file, workspace, graph) => workspace.syntaxRole === "source" && Boolean(graph.get("projectFormat")?.modeId),
+    highlight: (source, context) => context.graph.get("projectFormat")?.highlight(source) || highlightPlain(source),
+    status: (context) => `${context.graph.get("projectFormat")?.label || "Project format"} active.`,
+  });
+
+  modeRegistry.register({
+    id: "plain",
+    label: "Plain text",
+    match: () => true,
+    highlight: highlightPlain,
+  });
+}
+
+registerModes();
 
 class CodeEditor {
-  constructor({ textarea, highlight, title, status, getHighlighter, onInput }) {
+  constructor({ textarea, highlight, title, status, toolbar, onInput }) {
     this.textarea = textarea;
     this.highlight = highlight;
     this.title = title;
     this.status = status;
-    this.getHighlighter = getHighlighter;
+    this.toolbar = toolbar;
     this.onInput = onInput;
     this.file = null;
+    this.mode = modeRegistry.get("plain");
     this.pendingRender = false;
 
     this.textarea.addEventListener("input", () => {
@@ -58,36 +233,58 @@ class CodeEditor {
     this.textarea.addEventListener("scroll", () => this.syncScroll());
   }
 
-  setFile(file, content) {
+  setFile(file, content, mode, context) {
     this.file = file;
+    this.mode = mode || modeRegistry.get("plain");
     this.textarea.value = content;
     this.title.textContent = `${file.path} (${file.size} B)`;
-    this.setStatus("");
-    this.render();
+    this.setStatus(this.mode.status?.(context) || `${this.mode.label} mode.`);
+    this.render(context);
   }
 
   clear(message) {
     this.file = null;
+    this.mode = modeRegistry.get("plain");
     this.textarea.value = "";
     this.highlight.textContent = "";
     this.title.textContent = message;
     this.setStatus("");
+    this.clearToolbar();
   }
 
-  queueRender() {
+  setToolbar(renderToolbar, context) {
+    this.clearToolbar();
+    if (!renderToolbar) {
+      return;
+    }
+
+    const fragment = renderToolbar(context);
+    if (!fragment) {
+      return;
+    }
+
+    this.toolbar.hidden = false;
+    this.toolbar.append(fragment);
+  }
+
+  clearToolbar() {
+    this.toolbar.replaceChildren();
+    this.toolbar.hidden = true;
+  }
+
+  queueRender(context) {
     if (this.pendingRender) {
       return;
     }
     this.pendingRender = true;
     requestAnimationFrame(() => {
       this.pendingRender = false;
-      this.render();
+      this.render(context);
     });
   }
 
-  render() {
-    const highlighter = this.getHighlighter() || highlighters.get("plain").highlightSource;
-    this.highlight.innerHTML = `${highlighter(this.textarea.value)}\n`;
+  render(context = {}) {
+    this.highlight.innerHTML = `${this.mode.highlight(this.textarea.value, context)}\n`;
     this.syncScroll();
   }
 
@@ -210,6 +407,9 @@ class EditorWorkspace extends HTMLElement {
 
     this.syntaxRole = this.dataset.syntaxRole || "source";
     this.emptyTitle = this.dataset.emptyTitle || "No file selected";
+    this.unsubscribers = [
+      graph.on("projectFormat:changed", () => this.handleProjectFormatChange()),
+    ];
 
     const browserTitle = this.querySelector("[data-browser-title]");
     const editorTitle = this.querySelector("[data-editor-title]");
@@ -236,7 +436,7 @@ class EditorWorkspace extends HTMLElement {
       highlight: this.querySelector("[data-highlight]"),
       title: this.querySelector("[data-source-title]"),
       status: this.querySelector("[data-status]"),
-      getHighlighter: () => this.currentHighlighter(),
+      toolbar: this.querySelector("[data-mode-toolbar]"),
       onInput: () => this.handleInput(),
     });
 
@@ -251,12 +451,27 @@ class EditorWorkspace extends HTMLElement {
     this.querySelector("[data-save-button]").addEventListener("click", () => this.save());
   }
 
+  disconnectedCallback() {
+    for (const unsubscribe of this.unsubscribers || []) {
+      unsubscribe();
+    }
+  }
+
+  context(file = this.editor.file) {
+    return {
+      appState,
+      file,
+      graph,
+      registry: modeRegistry,
+      workspace: this,
+    };
+  }
+
   async openDirectory(path) {
     return this.browser.open(path);
   }
 
   async openFile(path) {
-    const fileMeta = this.fileMeta(path);
     this.editor.clear(path);
     this.browser.markActive();
 
@@ -265,10 +480,13 @@ class EditorWorkspace extends HTMLElement {
       return false;
     }
 
-    const adapter = fileMeta.adapter || detectAdapter(file.path);
-    this.editor.setFile({ ...file, adapter }, file.content);
+    const enrichedFile = { ...file, ...this.fileMeta(file.path) };
+    const mode = modeRegistry.detect(enrichedFile, this);
+    const context = this.context(enrichedFile);
+    this.editor.setFile(enrichedFile, file.content, mode, context);
+    this.editor.setToolbar(mode.toolbar, context);
     this.browser.markActive();
-    this.afterOpenFile(adapter);
+    graph.emit("editor:file-opened", { workspace: this, file: enrichedFile, mode });
     return true;
   }
 
@@ -300,39 +518,125 @@ class EditorWorkspace extends HTMLElement {
     this.editor.title.textContent = `${file.path} (${file.size} B)`;
     this.editor.setStatus("Saved.");
     this.browser.markActive();
-  }
-
-  currentHighlighter() {
-    const adapterId = this.syntaxRole === "grammar" ? this.editor.file?.adapter : activeGrammarAdapter;
-    const adapter = highlighters.get(adapterId) || highlighters.get("plain");
-    return this.syntaxRole === "grammar" ? adapter.highlightGrammar : adapter.highlightSource;
+    graph.emit("editor:file-saved", {
+      workspace: this,
+      file: this.editor.file,
+      mode: this.editor.mode,
+    });
   }
 
   fileMeta(path) {
     return grammarFileMap.get(path) || {};
   }
 
-  afterOpenFile(adapter) {
-    if (this.syntaxRole !== "grammar") {
-      return;
-    }
+  handleInput() {
+    graph.emit("editor:changed", {
+      workspace: this,
+      file: this.editor.file,
+      mode: this.editor.mode,
+    });
 
-    activeGrammarAdapter = adapter || "plain";
-    this.editor.setStatus(`${adapterLabel(activeGrammarAdapter)} adapter active.`);
-    sourceWorkspace?.editor.queueRender();
+    if (this.editor.mode.id === "pest" && pestSettings.autocompile) {
+      compilePest(this);
+    }
   }
 
-  handleInput() {
-    if (this.syntaxRole !== "grammar") {
+  handleProjectFormatChange() {
+    if (!this.editor.file || this.syntaxRole !== "source") {
       return;
     }
 
-    this.editor.setStatus("Grammar changed in memory.");
-    sourceWorkspace?.editor.queueRender();
+    const mode = modeRegistry.detect(this.editor.file, this);
+    if (mode.id !== this.editor.mode.id) {
+      this.editor.mode = mode;
+      this.editor.setStatus(mode.status?.(this.context()) || `${mode.label} mode.`);
+    }
+    this.editor.queueRender(this.context());
   }
 }
 
 customElements.define("palimpsest-editor-workspace", EditorWorkspace);
+
+const pestSettings = {
+  autocompile: false,
+};
+
+function pestToolbar(context) {
+  const fragment = document.createDocumentFragment();
+
+  const compileButton = document.createElement("button");
+  compileButton.className = "text-button compact";
+  compileButton.type = "button";
+  compileButton.textContent = "Compile";
+  compileButton.addEventListener("click", () => compilePest(context.workspace));
+
+  const label = document.createElement("label");
+  label.className = "toolbar-check";
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = pestSettings.autocompile;
+  checkbox.addEventListener("change", () => {
+    pestSettings.autocompile = checkbox.checked;
+    graph.emit("pest:autocompile-changed", { enabled: pestSettings.autocompile });
+    if (pestSettings.autocompile) {
+      compilePest(context.workspace);
+    }
+  });
+
+  const text = document.createElement("span");
+  text.textContent = "Autocompile";
+
+  label.append(checkbox, text);
+  fragment.append(compileButton, label);
+  return fragment;
+}
+
+function compilePest(workspace) {
+  const file = workspace.editor.file;
+  if (!file || workspace.editor.mode.id !== "pest") {
+    return;
+  }
+
+  const runtime = {
+    version: (graph.get("projectFormat")?.version || 0) + 1,
+    grammarPath: file.path,
+    modeId: "project-format",
+    label: `${file.name || "Pest"} compiled`,
+    highlight: highlightSourceLike,
+  };
+
+  graph.set("projectFormat", runtime);
+  workspace.editor.setStatus(`Compiled ${file.path}.`);
+  graph.emit("grammar:compiled", { workspace, file, runtime });
+}
+
+function createTokenMode({ id, label, adapters = [], filenames = [], extensions = [], grammar, toolbar }) {
+  return {
+    id,
+    label,
+    match: (file) => adapters.includes(file.adapter) || filenames.includes(file.name) || extensions.includes(file.suffix),
+    highlight: (source) => tokenize(source, grammar),
+    toolbar,
+  };
+}
+
+function sourceGrammar({ lineComment = "//", keywords = [] }) {
+  return {
+    lineComment,
+    strings: new Set(['"', "'", "`"]),
+    ruleAssignment: false,
+    keywords: new Set(keywords),
+    operators: new Set(["{", "}", "(", ")", "[", "]", "=", "|", "*", "+", "?", "/", ",", ".", ":", ";", "-", "<", ">", "!", "&", "%", "#"]),
+  };
+}
+
+function javascriptGrammar(extraKeywords = []) {
+  return sourceGrammar({
+    lineComment: "//",
+    keywords: ["module", "exports", ...extraKeywords],
+  });
+}
 
 function parentPath(path) {
   const cleanPath = path === "." ? "" : path.replace(/\/+$/, "");
@@ -388,29 +692,11 @@ async function fetchFile(path, editor) {
   return response.json();
 }
 
-function detectAdapter(path) {
-  const name = path.split("/").pop() || "";
-  if (name === "grammar.js" || name === "grammar.json" || path.endsWith(".scm")) {
-    return "tree-sitter";
-  }
-  if (path.endsWith(".pest")) {
-    return "pest";
-  }
-  if (path.endsWith(".grammar")) {
-    return "lezer";
-  }
-  return "plain";
-}
-
 function fileKindLabel(entry) {
   if (entry.kind === "directory") {
     return "DIR";
   }
   return (entry.suffix || "FILE").replace(".", "").toUpperCase();
-}
-
-function adapterLabel(adapterId) {
-  return highlighters.get(adapterId)?.label || adapterId;
 }
 
 async function initializeWorkspaces() {
@@ -446,44 +732,10 @@ function highlightPlain(source) {
   return escapeHtml(source);
 }
 
-function highlightPest(source) {
-  return tokenize(source, {
-    lineComment: "//",
-    strings: new Set(['"', "'"]),
-    ruleAssignment: true,
-    keywords: new Set(["SOI", "EOI", "WHITESPACE", "COMMENT", "ANY"]),
-    operators: new Set(["{", "}", "(", ")", "[", "]", "=", "|", "*", "+", "?", "~", "!", "@", "_", "$", "^"]),
-  });
-}
-
-function highlightLezer(source) {
-  return tokenize(source, {
-    lineComment: "@comment",
-    strings: new Set(['"', "'"]),
-    ruleAssignment: true,
-    keywords: new Set(["@top", "@tokens", "@skip", "@detectDelim", "@precedence", "@external"]),
-    operators: new Set(["{", "}", "(", ")", "[", "]", "=", "|", "*", "+", "?", "/", ",", "."]),
-  });
-}
-
-function highlightJavaScriptLike(source) {
-  return tokenize(source, {
-    lineComment: "//",
-    strings: new Set(['"', "'", "`"]),
-    ruleAssignment: false,
-    keywords: new Set(["module", "exports", "grammar", "seq", "choice", "repeat", "optional", "token", "prec"]),
-    operators: new Set(["{", "}", "(", ")", "[", "]", "=", "|", "*", "+", "?", "/", ",", ".", ":", ";"]),
-  });
-}
-
 function highlightSourceLike(source) {
-  return tokenize(source, {
-    lineComment: "//",
-    strings: new Set(['"', "'"]),
-    ruleAssignment: false,
-    keywords: new Set(["if", "else", "let", "in", "true", "false", "nil", "and", "or"]),
-    operators: new Set(["{", "}", "(", ")", "[", "]", "=", "|", "*", "+", "?", "/", ",", ".", ":", ";", "-", "<", ">"]),
-  });
+  return tokenize(source, sourceGrammar({
+    keywords: ["if", "else", "let", "in", "true", "false", "nil", "and", "or"],
+  }));
 }
 
 function tokenize(source, grammar) {
@@ -501,7 +753,7 @@ function tokenize(source, grammar) {
       continue;
     }
 
-    if (grammar.lineComment?.startsWith("@") && source.startsWith(grammar.lineComment, index)) {
+    if (grammar.lineComment && grammar.lineComment !== "//" && source.startsWith(grammar.lineComment, index)) {
       const end = nextLineIndex(source, index);
       html += token("comment", source.slice(index, end));
       index = end;

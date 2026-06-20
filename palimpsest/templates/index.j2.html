@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Palimpsest</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=editor-workspaces-1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=modes-1">
 </head>
-<body data-build="editor-workspaces-1">
+<body data-build="modes-1">
 <script type="application/json" id="app-state">{{ state | tojson }}</script>
 <template id="editor-workspace-template">
     <aside class="group-sidebar">
@@ -29,6 +29,7 @@
             <button class="text-button" data-save-button type="button">Save</button>
         </header>
         <p class="source-title" data-source-title></p>
+        <div class="mode-toolbar" data-mode-toolbar hidden></div>
         <div class="code-editor">
             <pre class="highlight-surface" aria-hidden="true"><code data-highlight></code></pre>
             <textarea data-editor spellcheck="false"></textarea>
@@ -87,6 +88,6 @@
         data-syntax-role="grammar"
     ></palimpsest-editor-workspace>
 </main>
-<script src="{{ url_for('static', filename='js/app.js') }}?v=editor-workspaces-1"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v=modes-1"></script>
 </body>
 </html>

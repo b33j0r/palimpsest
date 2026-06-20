@@ -141,8 +141,8 @@ palimpsest-editor-workspace {
 }
 
 .editor-pane {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   background: #191b1f;
 }
 
@@ -207,6 +207,40 @@ palimpsest-editor-workspace {
   padding: 9px 18px;
 }
 
+.mode-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+  padding: 6px 18px;
+  border-bottom: 1px solid var(--line);
+  background: #1d2025;
+}
+
+.mode-toolbar[hidden] {
+  display: none;
+}
+
+.text-button.compact {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 0.74rem;
+}
+
+.toolbar-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  user-select: none;
+}
+
+.toolbar-check input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
 .file-list {
   display: grid;
   align-content: start;
@@ -267,6 +301,7 @@ palimpsest-editor-workspace {
 
 .code-editor {
   position: relative;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   background: var(--code-bg);
@@ -310,6 +345,7 @@ palimpsest-editor-workspace {
 }
 
 .editor-status {
+  flex: 0 0 auto;
   min-height: 32px;
   padding: 7px 18px;
   border-top: 1px solid var(--line);
