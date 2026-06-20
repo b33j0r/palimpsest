@@ -362,19 +362,40 @@ palimpsest-editor-workspace {
   color: #d99f7e;
 }
 
-.tok-rule {
+.tok-rule,
+.tok-function,
+.tok-method {
   color: #91cfec;
   font-weight: 650;
 }
 
-.tok-keyword {
+.tok-keyword,
+.tok-operator,
+.tok-punctuation,
+.tok-punctuation-delimiter,
+.tok-punctuation-bracket {
   color: #c5a7e8;
 }
 
-.tok-number {
+.tok-number,
+.tok-constant,
+.tok-constant-builtin {
   color: #b6c783;
 }
 
-.tok-operator {
+.tok-type,
+.tok-type-builtin,
+.tok-constructor {
   color: #e6bf73;
+}
+
+.tok-variable,
+.tok-variable-builtin,
+.tok-property,
+.tok-attribute {
+  color: var(--code-text);
+}
+
+.tok-tag {
+  color: var(--accent-strong);
 }

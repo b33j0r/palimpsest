@@ -56,7 +56,18 @@ export class FallbackHighlighterRegistry {
 
   register(highlighter) {
     this.highlighters.set(highlighter.id, highlighter);
-    this.highlighterOrder.push(highlighter);
+    this.highlighterOrder = this.highlighterOrder.filter((existing) => existing.id !== highlighter.id);
+    if (highlighter.id === "plain") {
+      this.highlighterOrder.push(highlighter);
+      return;
+    }
+
+    const plainIndex = this.highlighterOrder.findIndex((existing) => existing.id === "plain");
+    if (plainIndex === -1) {
+      this.highlighterOrder.push(highlighter);
+    } else {
+      this.highlighterOrder.splice(plainIndex, 0, highlighter);
+    }
   }
 
   get(id) {

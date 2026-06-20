@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import NamedTuple
 
 from flask import Blueprint, abort, jsonify, request
 
@@ -23,6 +24,12 @@ GRAMMAR_ADAPTERS = (
         "filenames": set(),
     },
 )
+
+
+class GrammarCandidate(NamedTuple):
+    path: Path
+    adapter: str | None = None
+    parser: str | None = None
 
 
 def create_api_blueprint(config: Config):
@@ -90,11 +97,13 @@ def create_api_blueprint(config: Config):
                 name=path.name,
                 path=config.relative_to_cwd(path),
                 absolute_path=path,
-                adapter=_detect_grammar_adapter(path),
+                adapter=candidate.adapter or _detect_grammar_adapter(path),
                 suffix=path.suffix,
                 size=path.stat().st_size,
+                parser=candidate.parser,
             )
-            for path in _iter_grammar_files(config)
+            for candidate in _iter_grammar_files(config)
+            for path in (candidate.path,)
         ]
         return jsonify([grammar.model_dump(mode="json") for grammar in grammar_files])
 
@@ -120,23 +129,54 @@ def _read_file(config: Config, target: Path) -> FileContent:
 
 def _iter_grammar_files(config: Config):
     seen: set[Path] = set()
-    for source in config.grammar_paths:
-        _ensure_inside_cwd(config, source)
-        if source.is_file():
-            candidates = [source]
-        elif source.is_dir():
-            candidates = sorted(
-                (path for path in source.rglob("*") if path.is_file()),
-                key=lambda path: config.relative_to_cwd(path).casefold(),
-            )
-        else:
-            continue
-
-        for path in candidates:
-            if path in seen or not _is_supported_grammar_file(path):
+    for source in _iter_grammar_sources(config):
+        for path in _iter_source_paths(config, source.path):
+            if path in seen:
                 continue
             seen.add(path)
-            yield path
+            adapter = source.adapter or _detect_grammar_adapter(path)
+            if adapter == "plain":
+                continue
+            yield GrammarCandidate(path=path, adapter=adapter, parser=source.parser)
+
+
+def _iter_grammar_sources(config: Config):
+    for path in config.project.grammar_files:
+        yield GrammarCandidate(path=config.resolve_project_path(path))
+    for parser in config.parser_configs:
+        for path in parser.grammar_files:
+            yield GrammarCandidate(
+                path=config.resolve_project_path(path),
+                adapter=parser.adapter,
+                parser=parser.id,
+            )
+    for filetype in config.filetype_configs:
+        parser_id = filetype.parser or filetype.id
+        for path in filetype.grammar_files:
+            yield GrammarCandidate(
+                path=config.resolve_project_path(path),
+                adapter="pest",
+                parser=parser_id,
+            )
+
+
+def _iter_source_paths(config: Config, source: Path):
+    if _has_glob(source):
+        root = _glob_root(source)
+        _ensure_inside_cwd(config, root)
+        pattern = source.relative_to(root).as_posix()
+        candidates = sorted(root.glob(pattern), key=lambda path: config.relative_to_cwd(path).casefold())
+        return [path for path in candidates if path.is_file()]
+
+    _ensure_inside_cwd(config, source)
+    if source.is_file():
+        return [source]
+    if source.is_dir():
+        return sorted(
+            (path for path in source.rglob("*") if path.is_file()),
+            key=lambda path: config.relative_to_cwd(path).casefold(),
+        )
+    return []
 
 
 def _detect_grammar_adapter(path: Path) -> str:
@@ -148,6 +188,22 @@ def _detect_grammar_adapter(path: Path) -> str:
 
 def _is_supported_grammar_file(path: Path) -> bool:
     return _detect_grammar_adapter(path) != "plain"
+
+
+def _has_glob(path: Path) -> bool:
+    return any(char in path.as_posix() for char in "*?[")
+
+
+def _glob_root(path: Path) -> Path:
+    parts = path.parts
+    root_parts = []
+    for part in parts:
+        if any(char in part for char in "*?["):
+            break
+        root_parts.append(part)
+    if not root_parts:
+        return Path(".")
+    return Path(*root_parts)
 
 
 def _ensure_inside_cwd(config: Config, target: Path) -> None:

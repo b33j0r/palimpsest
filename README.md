@@ -2,14 +2,27 @@
 
 Palimpsest is a workbench for designing language grammars against real project files. It is meant to point at an actual project directory, read a small `palimpsest.toml`, browse that project's examples, and grow into a live syntax-highlighting preview while the grammar changes.
 
-Currently, a project dir's `palimpsest.toml` can declare where examples and grammar files live:
+Currently, a project dir's `palimpsest.toml` can declare where examples live, how parsers are built, and which filetypes use those parsers:
 
 ```toml
 examples_dir = "./examples"
-grammar_files = ["./crates/parser/src/moneyscheme.pest"]
+
+[[parsers.mscm]]
+adapter = "pest"
+grammar_files = ["./crates/parser/*.pest"]
+highlight_captures = { rule = "function", string = "string" }
+
+[parsers.mscm.build]
+command = "cargo build -p parser-wasm"
+outputs = ["./target/parser.wasm"]
+
+[[filetypes.mscm]]
+extensions = ["*.mscm"]
+parser = "mscm"
+highlight_captures = { symbol = "variable", number = "number" }
 ```
 
-`grammar_files` accepts files or directories. Directories are scanned for supported grammar sources. The app currently registers adapter IDs for:
+Legacy top-level `grammar_files` is still accepted. During the transition, `grammar_files` can also live directly under a `[[filetypes.name]]` table; the filetype name is treated as the parser id. Grammar file paths accept files, directories, and simple glob patterns such as `./crates/parser/*.pest`. The app currently registers adapter IDs for:
 
 - `pest`: `.pest`
 - `tree-sitter`: `grammar.js`, `grammar.json`, `.scm`
@@ -52,3 +65,5 @@ Each editor resolves a major mode through the browser-side mode registry when a 
 Modes can optionally render a toolbar and declare a compiler. The Pest major mode uses the fallback Pest highlighter plus `Compile` and `Autocompile` controls. Compilation runs through a compiler registry, updates a browser-side project-format runtime, and emits graph signals; later backends can replace that compiler with Pest/nom/WASM or server-side work while keeping the editor/workspace contract the same.
 
 The UI has a small signal graph for dataflow-style updates. Editor open/change/save events, runtime changes, and grammar compile events flow through that graph, and opened files are captured by resolved mode so format-specific behavior has a single registry-facing hook. Modes can declare runtime dependencies; when a runtime changes, open editors re-resolve their mode and re-render only when the runtime applies. When a Pest grammar compiles, open source editors can switch to the project-format mode and reload against the updated runtime, which is the path toward live custom parser/highlighter reloads.
+
+Parser and filetype `highlight_captures` map parser output captures to standard token classes. Capture targets should use stable names such as `comment`, `string`, `keyword`, `number`, `function`, `method`, `type`, `constructor`, `variable`, `property`, `attribute`, `constant`, `operator`, `punctuation`, and `tag`. Dotted capture names can be rendered as dash-separated token classes, matching Tree-sitter conventions such as `punctuation.delimiter` to `tok-punctuation-delimiter`.

@@ -1,13 +1,15 @@
 import { loadGrammarMetadata } from "./api.mjs";
 import { SignalGraph } from "./core/signal_graph.mjs";
 import { CompilerRegistry, FallbackHighlighterRegistry, ModeRegistry, RuntimeRegistry } from "./core/registries.mjs";
-import { highlightSourceLike } from "./highlight/tokenizer.mjs";
+import { normalizeConfiguredFiletypes, registerConfiguredFiletypeHighlighters } from "./configured_filetypes.mjs";
+import { highlightPlain, highlightSourceLike } from "./highlight/tokenizer.mjs";
 import { registerFallbackHighlighters } from "./highlight/fallbacks.mjs";
 import { registerModes } from "./modes/index.mjs";
 import { parentPath } from "./utils/path.mjs";
 import { createEditorWorkspaceClass } from "./workspace.mjs";
 
 const appState = JSON.parse(document.getElementById("app-state").textContent);
+const configuredFiletypes = normalizeConfiguredFiletypes(appState);
 
 let grammarFiles = [];
 let grammarFileMap = new Map();
@@ -44,12 +46,14 @@ runtimes.register({
 });
 
 registerFallbackHighlighters(fallbackHighlighters);
+registerConfiguredFiletypeHighlighters(fallbackHighlighters, configuredFiletypes, highlightPlain);
 registerModes({
   modeRegistry,
   fallbackHighlighters,
   runtimes,
   compilers,
   graph,
+  configuredFiletypes,
 });
 
 customElements.define(

@@ -6,12 +6,36 @@ import pydantic
 from palimpsest.config import Config
 
 
+class ParserBuildState(pydantic.BaseModel):
+    command: str | list[str] | None = None
+    cwd: Path | None = None
+    outputs: list[Path]
+
+
+class ParserState(pydantic.BaseModel):
+    id: str
+    adapter: str
+    grammar_files: list[Path]
+    build: ParserBuildState
+    highlight_captures: dict[str, str]
+
+
+class FiletypeState(pydantic.BaseModel):
+    id: str
+    extensions: list[str]
+    parser: str | None
+    grammar_files: list[Path]
+    highlight_captures: dict[str, str]
+
+
 class AppState(pydantic.BaseModel):
     app_name: str = "Palimpsest"
     cwd: Path
     config_path: Path
     examples_dir: Path
     grammar_files: list[Path]
+    parsers: list[ParserState]
+    filetypes: list[FiletypeState]
 
     @classmethod
     def from_config(cls, config: Config):
@@ -20,6 +44,30 @@ class AppState(pydantic.BaseModel):
             config_path=config.config_path,
             examples_dir=config.examples_path,
             grammar_files=config.grammar_paths,
+            parsers=[
+                ParserState(
+                    id=parser.id,
+                    adapter=parser.adapter,
+                    grammar_files=[config.resolve_project_path(path) for path in parser.grammar_files],
+                    build=ParserBuildState(
+                        command=parser.build.command,
+                        cwd=config.resolve_project_path(parser.build.cwd) if parser.build.cwd else None,
+                        outputs=[config.resolve_project_path(path) for path in parser.build.outputs],
+                    ),
+                    highlight_captures=parser.highlight_captures,
+                )
+                for parser in config.parser_configs
+            ],
+            filetypes=[
+                FiletypeState(
+                    id=filetype.id,
+                    extensions=filetype.extensions,
+                    parser=filetype.parser,
+                    grammar_files=[config.resolve_project_path(path) for path in filetype.grammar_files],
+                    highlight_captures=filetype.highlight_captures,
+                )
+                for filetype in config.filetype_configs
+            ],
         )
 
 
@@ -55,3 +103,4 @@ class GrammarFile(pydantic.BaseModel):
     adapter: str
     suffix: str
     size: int
+    parser: str | None = None

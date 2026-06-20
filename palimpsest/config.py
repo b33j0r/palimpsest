@@ -1,5 +1,6 @@
 from pathlib import Path
 import tomllib
+from typing import Any
 
 import pydantic
 
@@ -7,9 +8,44 @@ import pydantic
 DEFAULT_CWD = Path("~/Projects/moneyscheme").expanduser()
 
 
+class ParserBuildConfig(pydantic.BaseModel):
+    command: str | list[str] | None = None
+    cwd: Path | None = None
+    outputs: list[Path] = pydantic.Field(default_factory=list)
+
+
+class ParserConfig(pydantic.BaseModel):
+    id: str = ""
+    adapter: str = "pest"
+    grammar_files: list[Path] = pydantic.Field(default_factory=list)
+    build: ParserBuildConfig = pydantic.Field(default_factory=ParserBuildConfig)
+    highlight_captures: dict[str, str] = pydantic.Field(default_factory=dict)
+
+
+class FiletypeConfig(pydantic.BaseModel):
+    id: str = ""
+    extensions: list[str] = pydantic.Field(default_factory=list)
+    parser: str | None = None
+    grammar_files: list[Path] = pydantic.Field(default_factory=list)
+    highlight_captures: dict[str, str] = pydantic.Field(default_factory=dict)
+
+
 class ProjectConfig(pydantic.BaseModel):
     examples_dir: Path = Path("examples")
     grammar_files: list[Path] = pydantic.Field(default_factory=list)
+    parsers: list[ParserConfig] = pydantic.Field(default_factory=list)
+    filetypes: list[FiletypeConfig] = pydantic.Field(default_factory=list)
+
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def flatten_named_tables(cls, data: Any):
+        if not isinstance(data, dict):
+            return data
+
+        normalized = dict(data)
+        for key in ("parsers", "filetypes"):
+            normalized[key] = _flatten_named_config_table(normalized.get(key), key[:-1])
+        return normalized
 
 
 class Config(pydantic.BaseModel):
@@ -41,7 +77,20 @@ class Config(pydantic.BaseModel):
 
     @property
     def grammar_paths(self) -> list[Path]:
-        return [self.resolve_project_path(path) for path in self.project.grammar_files]
+        grammar_files = list(self.project.grammar_files)
+        for parser in self.project.parsers:
+            grammar_files.extend(parser.grammar_files)
+        for filetype in self.project.filetypes:
+            grammar_files.extend(filetype.grammar_files)
+        return [self.resolve_project_path(path) for path in grammar_files]
+
+    @property
+    def parser_configs(self) -> list[ParserConfig]:
+        return self.project.parsers
+
+    @property
+    def filetype_configs(self) -> list[FiletypeConfig]:
+        return self.project.filetypes
 
     def resolve_project_path(self, path: Path | str) -> Path:
         candidate = Path(path).expanduser()
@@ -71,3 +120,34 @@ def get_config(**overrides) -> Config:
         config = config.model_copy(update=overrides)
 
     return config
+
+
+def _flatten_named_config_table(value: Any, fallback_prefix: str) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [dict(item) for item in value if isinstance(item, dict)]
+    if not isinstance(value, dict):
+        return []
+
+    flattened = []
+    for name, entries in value.items():
+        if isinstance(entries, list):
+            named_entries = entries
+        elif isinstance(entries, dict):
+            named_entries = [entries]
+        else:
+            continue
+
+        for index, entry in enumerate(named_entries):
+            if not isinstance(entry, dict):
+                continue
+            normalized = dict(entry)
+            normalized.setdefault("id", name if index == 0 else f"{name}-{index + 1}")
+            flattened.append(normalized)
+
+    if not flattened and value:
+        normalized = dict(value)
+        normalized.setdefault("id", fallback_prefix)
+        return [normalized]
+    return flattened
