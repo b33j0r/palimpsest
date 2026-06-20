@@ -41,23 +41,82 @@ class SignalGraph {
 
 const graph = new SignalGraph();
 
-const projectFormatRuntime = {
-  version: 0,
-  grammarPath: "",
-  modeId: "",
-  label: "Project format",
-  highlight: highlightSourceLike,
-};
+class RuntimeRegistry {
+  constructor({ graph }) {
+    this.graph = graph;
+    this.runtimes = new Map();
+  }
 
-graph.set("projectFormat", { ...projectFormatRuntime });
+  register(runtime) {
+    this.runtimes.set(runtime.id, runtime);
+    this.graph.emit("runtime:registered", { runtime });
+    this.graph.emit(`runtime:${runtime.id}:changed`, { runtime });
+  }
+
+  update(id, patch) {
+    const previous = this.runtimes.get(id) || { id, version: 0 };
+    const runtime = {
+      ...previous,
+      ...patch,
+      id,
+      version: patch.version ?? previous.version + 1,
+    };
+    this.runtimes.set(id, runtime);
+    this.graph.emit("runtime:changed", { runtime, previous });
+    this.graph.emit(`runtime:${id}:changed`, { runtime, previous });
+    return runtime;
+  }
+
+  get(id) {
+    return this.runtimes.get(id);
+  }
+}
+
+const runtimes = new RuntimeRegistry({ graph });
+
+class CompilerRegistry {
+  constructor() {
+    this.compilers = new Map();
+  }
+
+  register(compiler) {
+    this.compilers.set(compiler.id, compiler);
+  }
+
+  async compile(id, context) {
+    const compiler = this.compilers.get(id);
+    if (!compiler) {
+      context.workspace.editor.setStatus(`Compiler not registered: ${id}.`);
+      return null;
+    }
+    return compiler.compile(context);
+  }
+}
+
+const compilers = new CompilerRegistry();
+
 graph.set("openedFormats", new Map());
 graph.on("editor:file-opened", ({ detail }) => {
   const openedFormats = new Map(graph.get("openedFormats") || []);
   const modeId = detail.mode.id;
-  const paths = new Set(openedFormats.get(modeId) || []);
+  const format = openedFormats.get(modeId) || {
+    modeId,
+    label: detail.mode.label,
+    paths: new Set(),
+  };
+  const paths = new Set(format.paths);
   paths.add(detail.file.path);
-  openedFormats.set(modeId, paths);
+  openedFormats.set(modeId, { ...format, paths });
   graph.set("openedFormats", openedFormats);
+});
+
+runtimes.register({
+  id: "project-format",
+  version: 0,
+  grammarPath: "",
+  label: "Project format",
+  highlight: highlightSourceLike,
+  ready: false,
 });
 
 class ModeRegistry {
@@ -102,6 +161,7 @@ function registerModes() {
       operators: new Set(["{", "}", "(", ")", "[", "]", "=", "|", "*", "+", "?", "~", "!", "@", "_", "$", "^"]),
     },
     toolbar: pestToolbar,
+    compilerId: "pest-project-format",
   }));
 
   modeRegistry.register(createTokenMode({
@@ -199,9 +259,10 @@ function registerModes() {
   modeRegistry.register({
     id: "project-format",
     label: "Project format",
-    match: (file, workspace, graph) => workspace.syntaxRole === "source" && Boolean(graph.get("projectFormat")?.modeId),
-    highlight: (source, context) => context.graph.get("projectFormat")?.highlight(source) || highlightPlain(source),
-    status: (context) => `${context.graph.get("projectFormat")?.label || "Project format"} active.`,
+    match: (file, workspace, graph) => workspace.syntaxRole === "source" && Boolean(runtimes.get("project-format")?.ready),
+    runtimeIds: () => ["project-format"],
+    highlight: (source) => runtimes.get("project-format")?.highlight(source) || highlightPlain(source),
+    status: () => `${runtimes.get("project-format")?.label || "Project format"} active.`,
   });
 
   modeRegistry.register({
@@ -408,7 +469,7 @@ class EditorWorkspace extends HTMLElement {
     this.syntaxRole = this.dataset.syntaxRole || "source";
     this.emptyTitle = this.dataset.emptyTitle || "No file selected";
     this.unsubscribers = [
-      graph.on("projectFormat:changed", () => this.handleProjectFormatChange()),
+      graph.on("runtime:changed", ({ detail }) => this.handleRuntimeChange(detail.runtime.id)),
     ];
 
     const browserTitle = this.querySelector("[data-browser-title]");
@@ -457,11 +518,14 @@ class EditorWorkspace extends HTMLElement {
     }
   }
 
-  context(file = this.editor.file) {
+  context(file = this.editor.file, mode = this.editor.mode) {
     return {
       appState,
+      compilers,
       file,
       graph,
+      mode,
+      runtimes,
       registry: modeRegistry,
       workspace: this,
     };
@@ -482,7 +546,7 @@ class EditorWorkspace extends HTMLElement {
 
     const enrichedFile = { ...file, ...this.fileMeta(file.path) };
     const mode = modeRegistry.detect(enrichedFile, this);
-    const context = this.context(enrichedFile);
+    const context = this.context(enrichedFile, mode);
     this.editor.setFile(enrichedFile, file.content, mode, context);
     this.editor.setToolbar(mode.toolbar, context);
     this.browser.markActive();
@@ -537,21 +601,37 @@ class EditorWorkspace extends HTMLElement {
     });
 
     if (this.editor.mode.id === "pest" && pestSettings.autocompile) {
-      compilePest(this);
+      compilers.compile(this.editor.mode.compilerId, this.context());
     }
   }
 
-  handleProjectFormatChange() {
-    if (!this.editor.file || this.syntaxRole !== "source") {
+  handleRuntimeChange(runtimeId) {
+    if (!this.editor.file) {
       return;
     }
 
+    const currentRuntimeIds = this.editor.mode.runtimeIds?.(this.context()) || [];
     const mode = modeRegistry.detect(this.editor.file, this);
-    if (mode.id !== this.editor.mode.id) {
+    const modeChanged = mode.id !== this.editor.mode.id;
+    const runtimeApplies = currentRuntimeIds.includes(runtimeId) || (mode.runtimeIds?.(this.context()) || []).includes(runtimeId);
+
+    if (!modeChanged && !runtimeApplies) {
+      return;
+    }
+
+    if (modeChanged) {
       this.editor.mode = mode;
       this.editor.setStatus(mode.status?.(this.context()) || `${mode.label} mode.`);
+      this.editor.setToolbar(mode.toolbar, this.context());
     }
     this.editor.queueRender(this.context());
+    graph.emit("editor:runtime-applied", {
+      workspace: this,
+      file: this.editor.file,
+      mode: this.editor.mode,
+      runtimeId,
+      runtime: runtimes.get(runtimeId),
+    });
   }
 }
 
@@ -568,7 +648,7 @@ function pestToolbar(context) {
   compileButton.className = "text-button compact";
   compileButton.type = "button";
   compileButton.textContent = "Compile";
-  compileButton.addEventListener("click", () => compilePest(context.workspace));
+  compileButton.addEventListener("click", () => compilers.compile(context.mode.compilerId, context));
 
   const label = document.createElement("label");
   label.className = "toolbar-check";
@@ -580,7 +660,7 @@ function pestToolbar(context) {
     pestSettings.autocompile = checkbox.checked;
     graph.emit("pest:autocompile-changed", { enabled: pestSettings.autocompile });
     if (pestSettings.autocompile) {
-      compilePest(context.workspace);
+      compilers.compile(context.mode.compilerId, context);
     }
   });
 
@@ -592,32 +672,36 @@ function pestToolbar(context) {
   return fragment;
 }
 
-function compilePest(workspace) {
-  const file = workspace.editor.file;
-  if (!file || workspace.editor.mode.id !== "pest") {
-    return;
-  }
+compilers.register({
+  id: "pest-project-format",
+  label: "Pest project-format compiler",
+  compile: (context) => {
+    const { file, workspace } = context;
+    if (!file || workspace.editor.mode.id !== "pest") {
+      return null;
+    }
 
-  const runtime = {
-    version: (graph.get("projectFormat")?.version || 0) + 1,
-    grammarPath: file.path,
-    modeId: "project-format",
-    label: `${file.name || "Pest"} compiled`,
-    highlight: highlightSourceLike,
-  };
+    const runtime = runtimes.update("project-format", {
+      grammarPath: file.path,
+      label: `${file.name || "Pest"} compiled`,
+      highlight: highlightSourceLike,
+      ready: true,
+    });
 
-  graph.set("projectFormat", runtime);
-  workspace.editor.setStatus(`Compiled ${file.path}.`);
-  graph.emit("grammar:compiled", { workspace, file, runtime });
-}
+    workspace.editor.setStatus(`Compiled ${file.path}.`);
+    graph.emit("grammar:compiled", { workspace, file, runtime });
+    return runtime;
+  },
+});
 
-function createTokenMode({ id, label, adapters = [], filenames = [], extensions = [], grammar, toolbar }) {
+function createTokenMode({ id, label, adapters = [], filenames = [], extensions = [], grammar, toolbar, compilerId }) {
   return {
     id,
     label,
     match: (file) => adapters.includes(file.adapter) || filenames.includes(file.name) || extensions.includes(file.suffix),
     highlight: (source) => tokenize(source, grammar),
     toolbar,
+    compilerId,
   };
 }
 
