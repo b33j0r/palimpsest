@@ -2,6 +2,9 @@
   "name": "palimpsest",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "node --test tests/js/*.test.mjs"
+  },
   "devDependencies": {
     "@lezer/generator": "1.8.0",
     "@lezer/lr": "1.4.0",
