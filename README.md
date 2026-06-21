@@ -5,7 +5,7 @@ project files. It opens a project configured with `palimpsest.toml`, shows two
 file browser/editor panes, and can load project-specific parser runtimes for
 syntax highlighting.
 
-![Palimpsest workbench screenshot](docs/ui-003.png)
+![Palimpsest workbench screenshot](docs/ui-004.png)
 
 Features:
 
