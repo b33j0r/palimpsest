@@ -87,11 +87,13 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
       settings.building = true;
       refreshToolbar(workspace);
       workspace.editor.setStatus(`Building ${parserId}...`);
+      graph.emit("parser:build-started", { workspace, file: activeFile, parserId, runtimeId });
       let build;
       try {
         build = await buildParser(parserId);
         settings.lastBuild = build;
         workspace.showBuildResult?.(build);
+        graph.emit("parser:build-finished", { workspace, file: activeFile, parserId, runtimeId, build });
         if (!build.ok) {
           workspace.editor.setStatus(`Build failed for ${parserId}.`);
           console.error("Palimpsest parser build failed", build);

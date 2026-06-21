@@ -37,6 +37,8 @@ graph.on("editor:file-opened", ({detail}) => {
     graph.set("openedFormats", openedFormats);
 });
 
+installHealthRefreshController();
+
 registerConfiguredParserRuntimes({appState, runtimes});
 
 registerFallbackHighlighters(fallbackHighlighters);
@@ -257,7 +259,7 @@ function clamp(value, min, max) {
 }
 
 async function initializeWorkspaces() {
-    renderHealth(await loadHealth());
+    await refreshHealth({reason: "startup"});
     grammarFiles = await loadGrammarMetadata();
     grammarFileMap = new Map(grammarFiles.map((file) => [file.path, file]));
     hydrateConfiguredParserRuntimes({appState, graph, runtimes});
@@ -280,18 +282,65 @@ async function initializeWorkspaces() {
     }
 }
 
-function renderHealth(health) {
+function installHealthRefreshController() {
+    graph.on("projectHealth:changed", ({detail}) => {
+        renderHealth(detail.value, {loading: Boolean(graph.get("projectHealthLoading"))});
+    });
+    graph.on("projectHealthLoading:changed", ({detail}) => {
+        renderHealth(graph.get("projectHealth") || null, {loading: detail.value});
+    });
+    graph.on("parser:build-started", () => {
+        graph.set("projectHealthLoading", true);
+    });
+    graph.on("parser:build-finished", ({detail}) => {
+        refreshHealth({reason: "parser-build-finished", parserId: detail.parserId});
+    });
+}
+
+let healthRefreshActive = false;
+let healthRefreshQueued = false;
+
+async function refreshHealth({reason = "manual", parserId = null} = {}) {
+    if (healthRefreshActive) {
+        healthRefreshQueued = true;
+        return graph.get("projectHealth") || null;
+    }
+
+    healthRefreshActive = true;
+    graph.set("projectHealthLoading", true);
+    try {
+        const health = await loadHealth();
+        graph.set("projectHealth", health);
+        graph.emit("project:health-refreshed", {health, reason, parserId});
+        return health;
+    } finally {
+        healthRefreshActive = false;
+        graph.set("projectHealthLoading", false);
+        if (healthRefreshQueued) {
+            healthRefreshQueued = false;
+            refreshHealth({reason: "queued"});
+        }
+    }
+}
+
+function renderHealth(health, {loading = false} = {}) {
     const panel = document.querySelector("[data-health-panel]");
     const summary = document.querySelector("[data-health-summary]");
     const body = document.querySelector("[data-health-body]");
     if (!panel || !summary || !body) {
         return;
     }
+    if (!health) {
+        summary.textContent = loading ? "Checking project health..." : "Project health unavailable";
+        return;
+    }
 
     const missingDependencies = (health.dependencies || []).filter((dependency) => !dependency.ok);
     const missingParsers = (health.parsers || []).filter((parser) => !parser.ok);
     panel.dataset.ok = health.ok ? "true" : "false";
-    summary.textContent = health.ok
+    summary.textContent = loading
+        ? "Checking project health..."
+        : health.ok
         ? "project"
         : `${missingDependencies.length + missingParsers.length || 1} project readiness issue(s)`;
 
