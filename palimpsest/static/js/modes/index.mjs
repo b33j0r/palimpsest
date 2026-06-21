@@ -149,34 +149,12 @@ function parserBuildToolbar(context, graph, compilers, configuredFiletypes) {
   const { parser, parserId } = buildContext;
   const settings = parserBuildSetting(parserId);
   const fragment = document.createDocumentFragment();
-  const parserFilePath = firstParserFile(parser);
-  const oppositeWorkspace = oppositePane(context.workspace, graph);
-
-  const parserButton = document.createElement("button");
-  parserButton.className = "text-button compact parser-jump-button";
-  parserButton.type = "button";
-  parserButton.textContent = "Parser";
-  parserButton.disabled = !parserFilePath || !oppositeWorkspace;
-  parserButton.title = parserFilePath
-    ? `Open ${parserFilePath} in the opposite pane`
-    : `Parser ${parserId} does not declare a parser source file`;
-  parserButton.addEventListener("click", async () => {
-    if (!parserFilePath || !oppositeWorkspace) {
-      return;
-    }
-    graph.emit("parser:file-reveal-requested", {
-      workspace: context.workspace,
-      targetWorkspace: oppositeWorkspace,
-      parserId,
-      path: parserFilePath,
-    });
-    const opened = await oppositeWorkspace.revealFile(parserFilePath);
-    graph.emit(opened ? "parser:file-revealed" : "parser:file-reveal-cancelled", {
-      workspace: context.workspace,
-      targetWorkspace: oppositeWorkspace,
-      parserId,
-      path: parserFilePath,
-    });
+  const parserButton = parserSourceButton({
+    context,
+    graph,
+    parser,
+    parserId,
+    show: Boolean(buildContext.filetype),
   });
 
   const compileButton = document.createElement("button");
@@ -208,7 +186,10 @@ function parserBuildToolbar(context, graph, compilers, configuredFiletypes) {
     : "Autobuild";
 
   label.append(checkbox, text);
-  fragment.append(parserButton, compileButton, label);
+  if (parserButton) {
+    fragment.append(parserButton);
+  }
+  fragment.append(compileButton, label);
   return fragment;
 }
 
@@ -217,7 +198,8 @@ function parserBuildContext(context, configuredFiletypes) {
     return null;
   }
 
-  const parserId = context.file.parser || findConfiguredFiletype(context.file, configuredFiletypes)?.parser;
+  const filetype = parserExampleFiletype(context.file, configuredFiletypes);
+  const parserId = context.file.parser || filetype?.parser;
   if (!parserId) {
     return null;
   }
@@ -227,7 +209,7 @@ function parserBuildContext(context, configuredFiletypes) {
     return null;
   }
 
-  return { file: context.file, parser, parserId };
+  return { file: context.file, filetype, parser, parserId };
 }
 
 function parserBuildSetting(parserId) {
@@ -248,6 +230,46 @@ function refreshToolbar(workspace) {
   }
   const context = workspace.context();
   workspace.editor.setToolbar(() => workspace.renderToolbar(context), context);
+}
+
+function parserSourceButton({ context, graph, parser, parserId, show }) {
+  if (!show) {
+    return null;
+  }
+
+  const parserFilePath = firstParserFile(parser);
+  const oppositeWorkspace = oppositePane(context.workspace, graph);
+  const button = document.createElement("button");
+  button.className = "text-button compact parser-jump-button";
+  button.type = "button";
+  button.textContent = "Parser";
+  button.disabled = !parserFilePath || !oppositeWorkspace;
+  button.title = parserFilePath
+    ? `Open ${parserFilePath} in the opposite pane`
+    : `Parser ${parserId} does not declare a parser source file`;
+  button.addEventListener("click", async () => {
+    if (!parserFilePath || !oppositeWorkspace) {
+      return;
+    }
+    graph.emit("parser:file-reveal-requested", {
+      workspace: context.workspace,
+      targetWorkspace: oppositeWorkspace,
+      parserId,
+      path: parserFilePath,
+    });
+    const opened = await oppositeWorkspace.revealFile(parserFilePath);
+    graph.emit(opened ? "parser:file-revealed" : "parser:file-reveal-cancelled", {
+      workspace: context.workspace,
+      targetWorkspace: oppositeWorkspace,
+      parserId,
+      path: parserFilePath,
+    });
+  });
+  return button;
+}
+
+export function parserExampleFiletype(file, configuredFiletypes) {
+  return findConfiguredFiletype(file, configuredFiletypes);
 }
 
 function firstParserFile(parser) {

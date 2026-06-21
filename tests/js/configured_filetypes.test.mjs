@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { findConfiguredFiletype, normalizeConfiguredFiletypes } from "../../palimpsest/static/js/configured_filetypes.mjs";
 import { parserRuntimeAssetUrl, parserRuntimeModuleUrl } from "../../palimpsest/static/js/api.mjs";
+import { parserExampleFiletype } from "../../palimpsest/static/js/modes/index.mjs";
 
 test("normalizes matching parser ids for filetypes with grammar files", () => {
   const filetypes = normalizeConfiguredFiletypes({
@@ -46,4 +47,29 @@ test("parser runtime asset URLs are scoped to parser id and asset filename", () 
   const url = parserRuntimeAssetUrl("demo/parser", "parser.wasm");
 
   assert.equal(url, "/api/parsers/demo%2Fparser/runtime/parser.wasm");
+});
+
+test("parser source navigation only applies to configured example filetypes", () => {
+  const filetypes = normalizeConfiguredFiletypes({
+    filetypes: [
+      {
+        id: "bet",
+        extensions: ["*.bet"],
+        parser: "bet_tree_sitter",
+      },
+    ],
+  });
+
+  assert.equal(
+    parserExampleFiletype({ name: "garden.bet", suffix: ".bet" }, filetypes).id,
+    "bet",
+  );
+  assert.equal(
+    parserExampleFiletype({
+      name: "grammar.js",
+      suffix: ".js",
+      parser: "bet_tree_sitter",
+    }, filetypes),
+    null,
+  );
 });
