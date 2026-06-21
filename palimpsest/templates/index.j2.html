@@ -33,31 +33,37 @@
 </template>
 <div class="app-layout">
     <header class="app-header">
-        <div>
-            <h1>Palimpsest</h1>
-            <p class="app-subtitle">Local grammar workbench for {{ state.cwd }}</p>
+        <a class="app-brand app-bar-link" href="/" aria-label="Palimpsest workspace">palimpsest</a>
+        <div class="app-header-actions">
+            <details class="health-panel" data-health-panel>
+                <summary data-health-summary>Checking project health...</summary>
+                <div class="health-body" data-health-body></div>
+            </details>
+            <nav class="app-nav" aria-label="Project links">
+                <a class="app-bar-link github-link" href="https://github.com/b33j0r/palimpsest" target="_blank" rel="noopener noreferrer" aria-label="Palimpsest on GitHub">
+                    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                        <path d="M8 0.2a7.8 7.8 0 0 0-2.5 15.2c0.4 0.1 0.5-0.2 0.5-0.4v-1.4c-2 0.4-2.4-0.8-2.4-0.8-0.3-0.8-0.8-1-0.8-1-0.7-0.5 0.1-0.5 0.1-0.5 0.7 0.1 1.1 0.8 1.1 0.8 0.7 1.1 1.7 0.8 2.1 0.6 0.1-0.5 0.3-0.8 0.5-1-1.6-0.2-3.3-0.8-3.3-3.8 0-0.8 0.3-1.5 0.8-2.1-0.1-0.2-0.3-1 0.1-2 0 0 0.6-0.2 2.1 0.8A7.4 7.4 0 0 1 8 4.3c0.6 0 1.2 0.1 1.8 0.2 1.5-1 2.1-0.8 2.1-0.8 0.4 1 0.2 1.8 0.1 2 0.5 0.6 0.8 1.3 0.8 2.1 0 3-1.7 3.6-3.3 3.8 0.3 0.2 0.5 0.7 0.5 1.4V15c0 0.2 0.1 0.5 0.5 0.4A7.8 7.8 0 0 0 8 0.2Z"/>
+                    </svg>
+                </a>
+            </nav>
         </div>
-        <details class="health-panel" data-health-panel>
-            <summary data-health-summary>Checking project health...</summary>
-            <div class="health-body" data-health-body></div>
-        </details>
     </header>
     <main class="app-shell" aria-label="File editors">
         <palimpsest-editor-workspace
-            data-workspace="left"
-            data-browser-label="Examples"
-            data-pane-label="Source"
-            data-empty-title="No file selected"
-            data-editor-label="Source"
-            data-start-path="{{ state.examples_dir }}"
+                data-workspace="left"
+                data-browser-label="Examples"
+                data-pane-label="Source"
+                data-empty-title="No file selected"
+                data-editor-label="Source"
+                data-start-path="{{ state.examples_dir }}"
         ></palimpsest-editor-workspace>
 
         <palimpsest-editor-workspace
-            data-workspace="right"
-            data-browser-label="Grammar"
-            data-pane-label="Parser"
-            data-empty-title="No file selected"
-            data-editor-label="Grammar or parser source"
+                data-workspace="right"
+                data-browser-label="Grammar"
+                data-pane-label="Parser"
+                data-empty-title="No file selected"
+                data-editor-label="Grammar or parser source"
         ></palimpsest-editor-workspace>
     </main>
 </div>

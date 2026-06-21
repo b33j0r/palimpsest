@@ -107,21 +107,40 @@ function renderHealth(health) {
 
   body.replaceChildren();
   body.append(
-    healthLine("Config", health.config_path || appState.config_path),
-    healthLine("Workspace", health.cwd || appState.cwd),
-    healthList("Dependencies", health.dependencies || [], (item) =>
-      `${item.ok ? "OK" : "Missing"}: ${item.name}${item.path ? ` (${item.path})` : ""}`,
-    ),
-    healthList("Parsers", health.parsers || [], (parser) =>
-      `${parser.ok ? "OK" : "Needs attention"}: ${parser.id}`,
-    ),
+    healthPairs([
+      ["Config", health.config_path || appState.config_path],
+      ["Workspace", health.cwd || appState.cwd],
+    ]),
+    healthList("Dependencies", health.dependencies || [], (item) => ({
+      status: item.ok ? "OK" : "Missing",
+      tone: item.ok ? "ok" : "warn",
+      name: item.name,
+      detail: item.path || item.reason || "",
+    })),
+    healthList("Parsers", health.parsers || [], (parser) => ({
+      status: parser.ok ? "OK" : "Check",
+      tone: parser.ok ? "ok" : "warn",
+      name: parser.id,
+      detail: parser.reason || "",
+    })),
   );
 }
 
-function healthLine(label, value) {
-  const line = document.createElement("p");
-  line.textContent = `${label}: ${value || "unknown"}`;
-  return line;
+function healthPairs(items) {
+  const list = document.createElement("dl");
+  list.className = "health-pairs";
+  for (const [label, value] of items) {
+    const row = document.createElement("div");
+    const term = document.createElement("dt");
+    const description = document.createElement("dd");
+
+    row.className = "health-pair";
+    term.textContent = label;
+    description.textContent = value || "unknown";
+    row.append(term, description);
+    list.append(row);
+  }
+  return list;
 }
 
 function healthList(label, items, renderItem) {
@@ -130,15 +149,32 @@ function healthList(label, items, renderItem) {
   const list = document.createElement("ul");
 
   title.textContent = label;
+  title.className = "health-section-title";
   list.className = "health-list";
   if (!items.length) {
     const empty = document.createElement("li");
+    empty.className = "health-check";
     empty.textContent = "No checks";
     list.append(empty);
   } else {
     for (const item of items) {
+      const rendered = renderItem(item);
       const row = document.createElement("li");
-      row.textContent = renderItem(item);
+      const status = document.createElement("span");
+      const name = document.createElement("span");
+      const detail = document.createElement("span");
+
+      row.className = "health-check";
+      status.className = `health-badge health-badge-${rendered.tone}`;
+      status.textContent = rendered.status;
+      name.className = "health-check-name";
+      name.textContent = rendered.name;
+      detail.className = "health-check-detail";
+      detail.textContent = rendered.detail;
+      row.append(status, name);
+      if (rendered.detail) {
+        row.append(detail);
+      }
       list.append(row);
     }
   }
