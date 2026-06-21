@@ -126,6 +126,17 @@ palimpsest-editor-workspace {
   padding: 0 12px;
 }
 
+.save-button {
+  border-color: color-mix(in srgb, var(--line) 80%, var(--muted));
+  color: var(--muted);
+}
+
+.save-button[data-dirty="true"] {
+  border-color: color-mix(in srgb, var(--warn) 75%, var(--line));
+  background: #3a2f1f;
+  color: #f3d89d;
+}
+
 .icon-button:hover,
 .text-button:hover {
   border-color: color-mix(in srgb, var(--accent) 60%, var(--line));

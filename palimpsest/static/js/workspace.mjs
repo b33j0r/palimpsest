@@ -209,8 +209,15 @@ export function createEditorWorkspaceClass(dependencies) {
       const template = document.getElementById("editor-workspace-template");
       this.append(template.content.cloneNode(true));
 
+      this.dirty = false;
       this.emptyTitle = this.dataset.emptyTitle || "No file selected";
+      this.savedContent = "";
       this.unsubscribers = [
+        graph.on("editor:changed", ({ detail }) => this.handleEditorChanged(detail)),
+        graph.on("editor:file-cleared", ({ detail }) => this.handleFileCleared(detail)),
+        graph.on("editor:file-opened", ({ detail }) => this.handleFileOpened(detail)),
+        graph.on("editor:file-saved", ({ detail }) => this.handleFileSaved(detail)),
+        graph.on("editor:dirty-changed", ({ detail }) => this.handleDirtyChanged(detail)),
         graph.on("runtime:changed", ({ detail }) => this.handleRuntimeChange(detail.runtime.id)),
       ];
 
@@ -218,6 +225,7 @@ export function createEditorWorkspaceClass(dependencies) {
       const editorTitle = this.querySelector("[data-editor-title]");
       const sidebar = this.querySelector(".group-sidebar");
       const editorPane = this.querySelector(".editor-pane");
+      this.saveButton = this.querySelector("[data-save-button]");
       const textarea = this.querySelector("[data-editor]");
 
       browserTitle.id = `${this.dataset.workspace}-browser-title`;
@@ -252,7 +260,8 @@ export function createEditorWorkspaceClass(dependencies) {
         getActivePath: () => this.editor.file?.path,
       });
 
-      this.querySelector("[data-save-button]").addEventListener("click", () => this.save());
+      this.renderSaveButtonState(false);
+      this.saveButton.addEventListener("click", () => this.save());
     }
 
     disconnectedCallback() {
@@ -281,6 +290,7 @@ export function createEditorWorkspaceClass(dependencies) {
 
     async openFile(path) {
       this.editor.clear(path);
+      graph.emit("editor:file-cleared", { workspace: this });
       this.browser.markActive();
 
       const file = await fetchFile(path, this.editor);
@@ -295,17 +305,21 @@ export function createEditorWorkspaceClass(dependencies) {
       this.editor.setFile(enrichedFile, file.content, mode, context);
       this.editor.setToolbar(mode.toolbar, context);
       this.browser.markActive();
-      graph.emit("editor:file-opened", { workspace: this, file: enrichedFile, mode, format });
+      graph.emit("editor:file-opened", { workspace: this, file: enrichedFile, mode, format, content: file.content });
       return true;
     }
 
-    async save() {
+    async save({ ifDirty = false } = {}) {
       if (!this.editor.file) {
         this.editor.setStatus("No file selected.");
-        return;
+        return false;
+      }
+      if (ifDirty && !this.hasUnsavedChanges()) {
+        return true;
       }
 
       this.editor.setStatus("Saving...");
+      const content = this.editor.textarea.value;
       const response = await fetch("/api/file", {
         method: "PUT",
         headers: {
@@ -313,13 +327,13 @@ export function createEditorWorkspaceClass(dependencies) {
         },
         body: JSON.stringify({
           path: this.editor.file.path,
-          content: this.editor.textarea.value,
+          content,
         }),
       });
 
       if (!response.ok) {
         this.editor.setStatus("Save failed.");
-        return;
+        return false;
       }
 
       const file = await response.json();
@@ -330,8 +344,10 @@ export function createEditorWorkspaceClass(dependencies) {
       graph.emit("editor:file-saved", {
         workspace: this,
         file: this.editor.file,
+        content,
         mode: this.editor.mode,
       });
+      return true;
     }
 
     resolveFormat(file, mode) {
@@ -348,10 +364,77 @@ export function createEditorWorkspaceClass(dependencies) {
       graph.emit("editor:changed", {
         workspace: this,
         file: this.editor.file,
+        content: this.editor.textarea.value,
         mode: this.editor.mode,
       });
 
       this.editor.mode.onInput?.(this.context());
+    }
+
+    hasUnsavedChanges() {
+      return Boolean(this.editor.file) && this.editor.textarea.value !== this.savedContent;
+    }
+
+    updateDirtyState() {
+      const dirty = this.hasUnsavedChanges();
+      if (dirty === this.dirty) {
+        return;
+      }
+
+      this.dirty = dirty;
+      graph.emit("editor:dirty-changed", {
+        workspace: this,
+        file: this.editor.file,
+        dirty,
+      });
+    }
+
+    handleEditorChanged(detail) {
+      if (detail.workspace !== this) {
+        return;
+      }
+      this.updateDirtyState();
+    }
+
+    handleFileOpened(detail) {
+      if (detail.workspace !== this) {
+        return;
+      }
+      this.savedContent = detail.content ?? this.editor.textarea.value;
+      this.updateDirtyState();
+    }
+
+    handleFileCleared(detail) {
+      if (detail.workspace !== this) {
+        return;
+      }
+      this.savedContent = "";
+      this.updateDirtyState();
+    }
+
+    handleFileSaved(detail) {
+      if (!this.editor.file || detail.file?.path !== this.editor.file.path) {
+        return;
+      }
+      if (typeof detail.content === "string") {
+        this.savedContent = detail.content;
+      }
+      this.updateDirtyState();
+    }
+
+    handleDirtyChanged(detail) {
+      if (detail.workspace !== this) {
+        return;
+      }
+      this.renderSaveButtonState(detail.dirty);
+    }
+
+    renderSaveButtonState(dirty) {
+      if (!this.saveButton) {
+        return;
+      }
+      this.saveButton.dataset.dirty = dirty ? "true" : "false";
+      this.saveButton.title = dirty ? "Unsaved changes" : "No unsaved changes";
     }
 
     handleRuntimeChange(runtimeId) {

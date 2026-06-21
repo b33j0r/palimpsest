@@ -71,12 +71,20 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
         return null;
       }
 
+      if (workspace.hasUnsavedChanges?.()) {
+        const saved = await workspace.save({ ifDirty: true });
+        if (!saved) {
+          return null;
+        }
+      }
+      const activeFile = workspace.editor.file || file;
+
       workspace.editor.setStatus(`Building ${parserId}...`);
       const build = await buildParser(parserId);
       if (!build.ok) {
         workspace.editor.setStatus(`Build failed for ${parserId}.`);
         console.error("Palimpsest parser build failed", build);
-        graph.emit("grammar:compile-failed", { workspace, file, build, runtimeId });
+        graph.emit("grammar:compile-failed", { workspace, file: activeFile, build, runtimeId });
         return null;
       }
 
@@ -84,18 +92,18 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
       const runtime = await loadConfiguredParserRuntime({
         appState: context.appState,
         graph,
-        grammarPath: file.path,
+        grammarPath: activeFile.path,
         parserId,
         runtimes,
       });
       if (!runtime) {
         workspace.editor.setStatus(`Runtime load failed for ${parserId}.`);
-        graph.emit("grammar:runtime-load-failed", { workspace, file, runtimeId });
+        graph.emit("grammar:runtime-load-failed", { workspace, file: activeFile, runtimeId });
         return null;
       }
 
       workspace.editor.setStatus(`Loaded ${parserId} runtime.`);
-      graph.emit("grammar:compiled", { workspace, file, runtime, runtimeId, build });
+      graph.emit("grammar:compiled", { workspace, file: activeFile, runtime, runtimeId, build });
       return runtime;
     },
   });
