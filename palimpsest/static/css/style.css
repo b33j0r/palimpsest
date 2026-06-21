@@ -324,16 +324,22 @@ palimpsest-editor-workspace {
 
 .tok-rule,
 .tok-function,
-.tok-method {
+.tok-method,
+.tok-handler,
+.tok-label {
   color: #91cfec;
   font-weight: 650;
 }
 
 .tok-keyword,
 .tok-operator,
+.tok-predicate,
+.tok-predicate-operator,
 .tok-punctuation,
 .tok-punctuation-delimiter,
-.tok-punctuation-bracket {
+.tok-punctuation-bracket,
+.tok-delimiter,
+.tok-bracket {
   color: #c5a7e8;
 }
 
@@ -345,12 +351,18 @@ palimpsest-editor-workspace {
 
 .tok-type,
 .tok-type-builtin,
-.tok-constructor {
+.tok-constructor,
+.tok-namespace {
   color: #e6bf73;
 }
 
 .tok-variable,
 .tok-variable-builtin,
+.tok-parameter,
+.tok-capture,
+.tok-capture-variable,
+.tok-capture-block,
+.tok-predicate-variable,
 .tok-property,
 .tok-attribute {
   color: var(--code-text);
