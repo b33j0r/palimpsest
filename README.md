@@ -7,6 +7,31 @@ syntax highlighting.
 
 ![Palimpsest workbench screenshot](docs/ui-001.png)
 
+## Requirements
+
+To run the workbench itself, install:
+
+- Python 3.13 or newer.
+- `uv`, for installing and running the Python command.
+
+The bundled examples also include Rust parser runtimes that compile to
+WebAssembly. To build those runtimes from the Palimpsest UI, install:
+
+- Rust and Cargo.
+- The `wasm32-unknown-unknown` Rust target.
+- `wasm-bindgen-cli`.
+
+One-time setup for the Rust/WASM tools:
+
+```sh
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli
+```
+
+Palimpsest still opens files before those parser runtimes are built. Until a
+runtime build succeeds, configured example files use fallback syntax
+highlighting instead of parser-backed highlighting.
+
 ## Run
 
 Install the command from a local checkout:
@@ -24,7 +49,10 @@ uv run palimpsest
 Open `http://127.0.0.1:5000`.
 
 The repository root contains `palimpsest.toml`, so running Palimpsest here opens
-the canonical example workspace in `./examples`.
+the canonical example workspace in `./examples`. Open a grammar file in the
+right pane and use its build button to compile the matching Rust/WASM parser
+runtime. After the build succeeds, `.clike` and `.talkie` files switch from
+fallback highlighting to parser-backed highlighting.
 
 You can also run an external project that contains `palimpsest.toml`:
 
