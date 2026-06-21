@@ -49,13 +49,13 @@ export class CodeEditor {
       return;
     }
 
-    const fragment = renderToolbar(context);
-    if (!fragment) {
+    const toolbar = renderToolbar(context);
+    if (!toolbar) {
       return;
     }
 
     this.toolbar.hidden = false;
-    this.toolbar.append(fragment);
+    this.toolbar.append(toolbar);
   }
 
   clearToolbar() {
@@ -221,25 +221,19 @@ export function createEditorWorkspaceClass(dependencies) {
         graph.on("runtime:changed", ({ detail }) => this.handleRuntimeChange(detail.runtime.id)),
       ];
 
-      const browserTitle = this.querySelector("[data-browser-title]");
-      const editorTitle = this.querySelector("[data-editor-title]");
+      const sourceTitle = this.querySelector("[data-source-title]");
       const sidebar = this.querySelector(".group-sidebar");
       const editorPane = this.querySelector(".editor-pane");
-      this.saveButton = this.querySelector("[data-save-button]");
+      this.saveButton = this.createSaveButton();
       const textarea = this.querySelector("[data-editor]");
 
-      browserTitle.id = `${this.dataset.workspace}-browser-title`;
-      editorTitle.id = `${this.dataset.workspace}-editor-title`;
+      sourceTitle.id = `${this.dataset.workspace}-source-title`;
       sidebar.dataset.region = this.dataset.workspace;
-      sidebar.setAttribute("aria-labelledby", browserTitle.id);
+      sidebar.setAttribute("aria-label", `${this.dataset.workspace} files`);
       editorPane.dataset.region = this.dataset.workspace;
-      editorPane.setAttribute("aria-labelledby", editorTitle.id);
+      editorPane.setAttribute("aria-labelledby", sourceTitle.id);
 
-      this.querySelector("[data-browser-eyebrow]").textContent = this.dataset.browserEyebrow || "";
-      browserTitle.textContent = this.dataset.browserTitle || "Files";
-      this.querySelector("[data-editor-eyebrow]").textContent = this.dataset.editorEyebrow || "";
-      editorTitle.textContent = this.dataset.editorTitle || "Editor";
-      this.querySelector("[data-source-title]").textContent = this.emptyTitle;
+      sourceTitle.textContent = this.emptyTitle;
       textarea.setAttribute("aria-label", this.dataset.editorLabel || "Source");
 
       this.editor = new CodeEditor({
@@ -262,6 +256,7 @@ export function createEditorWorkspaceClass(dependencies) {
 
       this.renderSaveButtonState(false);
       this.saveButton.addEventListener("click", () => this.save());
+      this.editor.setToolbar(() => this.renderToolbar(this.context()), this.context());
     }
 
     disconnectedCallback() {
@@ -290,6 +285,7 @@ export function createEditorWorkspaceClass(dependencies) {
 
     async openFile(path) {
       this.editor.clear(path);
+      this.editor.setToolbar(() => this.renderToolbar(this.context()), this.context());
       graph.emit("editor:file-cleared", { workspace: this });
       this.browser.markActive();
 
@@ -361,18 +357,34 @@ export function createEditorWorkspaceClass(dependencies) {
     }
 
     renderToolbar(context) {
-      const fragment = document.createDocumentFragment();
+      const toolbar = document.createDocumentFragment();
+      const leftItems = document.createElement("div");
+      const rightItems = document.createElement("div");
       const modeControls = context.mode.toolbar?.(context);
       const compilerControls = compilers.toolbar(context);
 
+      leftItems.className = "mode-toolbar-items mode-toolbar-items-left";
+      rightItems.className = "mode-toolbar-items mode-toolbar-items-right";
+
       if (modeControls) {
-        fragment.append(modeControls);
+        leftItems.append(modeControls);
       }
       if (compilerControls) {
-        fragment.append(compilerControls);
+        leftItems.append(compilerControls);
       }
 
-      return fragment.childNodes.length ? fragment : null;
+      rightItems.append(this.saveButton);
+      toolbar.append(leftItems, rightItems);
+      return toolbar;
+    }
+
+    createSaveButton() {
+      const button = document.createElement("button");
+      button.className = "text-button compact save-button";
+      button.dataset.saveButton = "";
+      button.type = "button";
+      button.textContent = "Save";
+      return button;
     }
 
     handleInput() {

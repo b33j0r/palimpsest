@@ -10,24 +10,11 @@
 <script type="application/json" id="app-state">{{ state | tojson }}</script>
 <template id="editor-workspace-template">
     <aside class="group-sidebar">
-        <header class="pane-header">
-            <div>
-                <p class="eyebrow" data-browser-eyebrow></p>
-                <h2 data-browser-title></h2>
-            </div>
-        </header>
         <div class="path-bar" data-path></div>
         <div class="file-list" data-file-list role="list"></div>
     </aside>
 
     <section class="editor-pane">
-        <header class="pane-header">
-            <div>
-                <p class="eyebrow" data-editor-eyebrow></p>
-                <h2 data-editor-title></h2>
-            </div>
-            <button class="text-button save-button" data-save-button type="button">Save</button>
-        </header>
         <p class="source-title" data-source-title></p>
         <div class="mode-toolbar" data-mode-toolbar hidden></div>
         <div class="code-editor">
@@ -40,10 +27,6 @@
 <main class="app-shell" aria-label="File editors">
     <palimpsest-editor-workspace
         data-workspace="left"
-        data-browser-eyebrow="Left Pane"
-        data-browser-title="Files"
-        data-editor-eyebrow="Left Pane"
-        data-editor-title="Editor"
         data-empty-title="No file selected"
         data-editor-label="Source"
         data-start-path="{{ state.examples_dir }}"
@@ -51,10 +34,6 @@
 
     <palimpsest-editor-workspace
         data-workspace="right"
-        data-browser-eyebrow="Right Pane"
-        data-browser-title="Files"
-        data-editor-eyebrow="Right Pane"
-        data-editor-title="Editor"
         data-empty-title="No file selected"
         data-editor-label="Source"
     ></palimpsest-editor-workspace>

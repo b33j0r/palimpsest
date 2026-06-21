@@ -67,15 +67,6 @@ palimpsest-editor-workspace {
   display: contents;
 }
 
-.eyebrow {
-  margin-bottom: 4px;
-  color: var(--accent);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
 .group-sidebar,
 .editor-pane {
   min-width: 0;
@@ -85,7 +76,7 @@ palimpsest-editor-workspace {
 
 .group-sidebar {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   background: var(--panel);
 }
 
@@ -97,16 +88,6 @@ palimpsest-editor-workspace {
 
 .editor-pane:last-child {
   border-right: 0;
-}
-
-.pane-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 64px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
 }
 
 .icon-button,
@@ -170,6 +151,7 @@ palimpsest-editor-workspace {
 .mode-toolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   min-height: 38px;
   padding: 6px 18px;
@@ -185,6 +167,23 @@ palimpsest-editor-workspace {
   height: 26px;
   padding: 0 10px;
   font-size: 0.74rem;
+}
+
+.mode-toolbar-items {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mode-toolbar-items-left {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+}
+
+.mode-toolbar-items-right {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .toolbar-check {
