@@ -10,13 +10,20 @@
 <script type="application/json" id="app-state">{{ state | tojson }}</script>
 <template id="editor-workspace-template">
     <aside class="group-sidebar">
+        <p class="pane-label" data-browser-label></p>
         <div class="path-bar" data-path></div>
         <div class="file-list" data-file-list role="list"></div>
     </aside>
 
     <section class="editor-pane">
+        <p class="pane-label" data-editor-pane-label></p>
         <p class="source-title" data-source-title></p>
         <div class="mode-toolbar" data-mode-toolbar hidden></div>
+        <details class="build-result" data-build-result hidden>
+            <summary data-build-summary></summary>
+            <dl class="build-meta" data-build-meta></dl>
+            <pre data-build-output></pre>
+        </details>
         <div class="code-editor">
             <pre class="highlight-surface" aria-hidden="true"><code data-highlight></code></pre>
             <textarea data-editor spellcheck="false"></textarea>
@@ -24,20 +31,36 @@
         <p class="editor-status" data-status role="status"></p>
     </section>
 </template>
-<main class="app-shell" aria-label="File editors">
-    <palimpsest-editor-workspace
-        data-workspace="left"
-        data-empty-title="No file selected"
-        data-editor-label="Source"
-        data-start-path="{{ state.examples_dir }}"
-    ></palimpsest-editor-workspace>
+<div class="app-layout">
+    <header class="app-header">
+        <div>
+            <h1>Palimpsest</h1>
+            <p class="app-subtitle">Local grammar workbench for {{ state.cwd }}</p>
+        </div>
+        <details class="health-panel" data-health-panel>
+            <summary data-health-summary>Checking project health...</summary>
+            <div class="health-body" data-health-body></div>
+        </details>
+    </header>
+    <main class="app-shell" aria-label="File editors">
+        <palimpsest-editor-workspace
+            data-workspace="left"
+            data-browser-label="Examples"
+            data-pane-label="Source"
+            data-empty-title="No file selected"
+            data-editor-label="Source"
+            data-start-path="{{ state.examples_dir }}"
+        ></palimpsest-editor-workspace>
 
-    <palimpsest-editor-workspace
-        data-workspace="right"
-        data-empty-title="No file selected"
-        data-editor-label="Source"
-    ></palimpsest-editor-workspace>
-</main>
+        <palimpsest-editor-workspace
+            data-workspace="right"
+            data-browser-label="Grammar"
+            data-pane-label="Parser"
+            data-empty-title="No file selected"
+            data-editor-label="Grammar or parser source"
+        ></palimpsest-editor-workspace>
+    </main>
+</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
 <script type="module" src="{{ url_for('static', filename='js/app.mjs') }}?v=library-highlighting-1"></script>
 </body>

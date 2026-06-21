@@ -1,4 +1,5 @@
 import argparse
+import sys
 
 from flask import Flask
 
@@ -19,6 +20,12 @@ def create_app(**config_overrides):
 
 def main(argv=None):
     args = _parse_args(argv)
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        print(
+            "Warning: Palimpsest can edit files and run configured project build commands. "
+            f"Binding to {args.host!r} may expose those controls beyond this machine.",
+            file=sys.stderr,
+        )
     app = create_app(cwd=args.project_dir, config_path=args.config)
     app.run(host=args.host, port=args.port, debug=args.debug)
 

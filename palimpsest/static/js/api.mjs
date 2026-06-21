@@ -15,6 +15,19 @@ export async function loadGrammarMetadata() {
   return response.json();
 }
 
+export async function loadHealth() {
+  const response = await fetch("/api/health");
+  if (!response.ok) {
+    return {
+      ok: false,
+      dependencies: [],
+      parsers: [],
+      error: "Unable to load project health.",
+    };
+  }
+  return response.json();
+}
+
 export async function buildParser(parserId) {
   const response = await fetch(`/api/parsers/${encodeURIComponent(parserId)}/build`, {
     method: "POST",

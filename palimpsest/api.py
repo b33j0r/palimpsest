@@ -1,9 +1,12 @@
 from pathlib import Path
+import shutil
 import shlex
 import subprocess
+import time
 from typing import NamedTuple
 
 from flask import Blueprint, abort, jsonify, request, send_from_directory
+from werkzeug.exceptions import HTTPException
 
 from palimpsest.config import Config
 from palimpsest.models import AppState, DirectoryListing, FileContent, FileEntry, GrammarFile
@@ -37,9 +40,21 @@ class GrammarCandidate(NamedTuple):
 def create_api_blueprint(config: Config):
     blueprint = Blueprint("api", __name__, url_prefix="/api")
 
+    @blueprint.errorhandler(HTTPException)
+    def api_error(error):
+        return jsonify({
+            "ok": False,
+            "error": error.name,
+            "message": error.description,
+        }), error.code
+
     @blueprint.get("/state")
     def state():
         return jsonify(AppState.from_config(config).model_dump(mode="json"))
+
+    @blueprint.get("/health")
+    def health():
+        return jsonify(_health_state(config))
 
     @blueprint.get("/files")
     def files():
@@ -121,37 +136,44 @@ def create_api_blueprint(config: Config):
         _ensure_inside_cwd(config, cwd)
 
         command = parser.build.display_command()
+        started = time.perf_counter()
         try:
             completed = _run_parser_build(parser, cwd)
         except subprocess.TimeoutExpired as error:
+            elapsed_ms = round((time.perf_counter() - started) * 1000)
             return jsonify({
                 "ok": False,
                 "parser": parser.id,
                 "command": command if isinstance(command, str) else shlex.join(command),
                 "cwd": cwd.as_posix(),
+                "elapsed_ms": elapsed_ms,
                 "returncode": None,
                 "stdout": error.stdout or "",
                 "stderr": f"Build timed out after {error.timeout} seconds.",
                 "outputs": [_output_state(config, path) for path in _parser_outputs(parser)],
             }), 504
         except FileNotFoundError as error:
+            elapsed_ms = round((time.perf_counter() - started) * 1000)
             return jsonify({
                 "ok": False,
                 "parser": parser.id,
                 "command": command if isinstance(command, str) else shlex.join(command),
                 "cwd": cwd.as_posix(),
+                "elapsed_ms": elapsed_ms,
                 "returncode": None,
                 "stdout": "",
                 "stderr": str(error),
                 "outputs": [_output_state(config, path) for path in _parser_outputs(parser)],
             }), 500
 
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
         outputs = [_output_state(config, path) for path in _parser_outputs(parser)]
         return jsonify({
             "ok": completed.returncode == 0,
             "parser": parser.id,
             "command": command if isinstance(command, str) else shlex.join(command),
             "cwd": cwd.as_posix(),
+            "elapsed_ms": elapsed_ms,
             "returncode": completed.returncode,
             "stdout": completed.stdout,
             "stderr": completed.stderr,
@@ -312,6 +334,116 @@ def _list_entries(config: Config, directory: Path) -> list[FileEntry]:
             )
         )
     return entries
+
+
+def _health_state(config: Config) -> dict:
+    parsers = [_parser_health(config, parser) for parser in config.parser_configs]
+    examples_dir = _path_health(config, config.project.examples_dir, expected="directory")
+    config_file = _path_health(config, config.config_path, expected="file", project_relative=False)
+    grammar_files = [_path_health(config, path, expected="file") for path in config.grammar_paths]
+    dependency_checks = _dependency_checks(config)
+    checks = [
+        config_file["ok"],
+        examples_dir["ok"],
+        all(item["ok"] for item in grammar_files),
+        all(parser["ok"] for parser in parsers),
+        all(check["ok"] for check in dependency_checks),
+    ]
+
+    return {
+        "ok": all(checks),
+        "cwd": config.cwd.as_posix(),
+        "config_path": config.config_path.as_posix(),
+        "examples_dir": examples_dir,
+        "grammar_files": grammar_files,
+        "parsers": parsers,
+        "dependencies": dependency_checks,
+    }
+
+
+def _parser_health(config: Config, parser) -> dict:
+    grammar_files = [_path_health(config, path, expected="file") for path in parser.grammar_files]
+    runtime = None
+    if parser.runtime.module is not None:
+        runtime = _path_health(config, parser.runtime.module, expected="file")
+
+    outputs = [_output_state(config, path) for path in _parser_outputs(parser)]
+    build_ready = not parser.build.has_build or all(
+        check["ok"] for check in _dependencies_for_build(parser)
+    )
+    ok = all(item["ok"] for item in grammar_files) and build_ready
+    if runtime is not None:
+        ok = ok and runtime["ok"]
+
+    return {
+        "id": parser.id,
+        "adapter": parser.adapter,
+        "ok": ok,
+        "build_configured": parser.build.has_build,
+        "build_command": parser.build.display_command(),
+        "grammar_files": grammar_files,
+        "runtime": runtime,
+        "outputs": outputs,
+    }
+
+
+def _path_health(config: Config, path: Path | str, *, expected: str, project_relative: bool = True) -> dict:
+    target = config.resolve_project_path(path) if project_relative else Path(path).resolve()
+    exists = target.exists()
+    if expected == "directory":
+        ok = target.is_dir()
+    elif expected == "file":
+        ok = target.is_file()
+    else:
+        ok = exists
+
+    try:
+        relative_path = config.relative_to_cwd(target)
+    except ValueError:
+        relative_path = target.as_posix()
+
+    return {
+        "ok": ok,
+        "path": relative_path,
+        "absolute_path": target.as_posix(),
+        "exists": exists,
+        "expected": expected,
+    }
+
+
+def _dependency_checks(config: Config) -> list[dict]:
+    checks = []
+    seen = set()
+    for parser in config.parser_configs:
+        for check in _dependencies_for_build(parser):
+            key = check["name"]
+            if key in seen:
+                continue
+            seen.add(key)
+            checks.append(check)
+    return checks
+
+
+def _dependencies_for_build(parser) -> list[dict]:
+    names = []
+    if parser.build.preset == "cargo-wasm-bindgen":
+        names = ["cargo", "wasm-bindgen"]
+    elif parser.build.preset == "lezer":
+        names = ["npx"]
+    elif isinstance(parser.build.command, list) and parser.build.command:
+        names = [parser.build.command[0]]
+
+    return [
+        {
+            "name": name,
+            "ok": shutil.which(name) is not None,
+            "path": shutil.which(name),
+            "reason": f"Required by parser build preset {parser.build.preset!r}"
+            if parser.build.preset
+            else "Required by parser build command",
+        }
+        for name in names
+    ]
 
 
 def _file_sort_key(path: Path):

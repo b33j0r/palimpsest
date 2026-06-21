@@ -11,9 +11,13 @@ Features:
 
 - Develop grammars against project files and examples.
 - Keep source examples and grammar/parser code visible side by side.
+- Inspect project health, configured parsers, missing build tools, and runtime
+  readiness from the workbench.
 - Build Rust parser runtimes from the browser with the `cargo-wasm-bindgen`
   preset.
 - Build Lezer parser runtimes from the browser with the `lezer` preset.
+- Review parser build commands, exit codes, stdout/stderr, elapsed time, and
+  declared outputs without opening browser developer tools.
 - Connect parser/highlighting runtimes through a small JSON token interface,
   with included Nom, Pest, and Lezer examples.
 - Use fallback highlighting for common source and grammar files.
@@ -46,9 +50,10 @@ Palimpsest UI, install Node.js and install the repository's npm dependencies:
 npm install
 ```
 
-Palimpsest still opens files before those parser runtimes are built. Until a
-runtime build succeeds, configured example files use fallback syntax
-highlighting instead of parser-backed highlighting.
+Palimpsest can still open configured example files before those parser runtimes
+are built. Until the matching runtime loads, the custom-language examples render
+with the plain-text fallback; parser-backed highlighting begins after a
+successful build.
 
 ## Run
 
@@ -66,11 +71,17 @@ uv run palimpsest
 
 Open `http://127.0.0.1:5000`.
 
+Palimpsest is intended to run as a trusted local development tool. It can edit
+files under the configured project directory and can run parser build commands
+declared in `palimpsest.toml`. The default host is local-only; if you bind to a
+non-local address, treat the workbench as access to your project files and build
+environment.
+
 The repository root contains `palimpsest.toml`, so running Palimpsest here opens
-the canonical example workspace in `./examples`. Open a grammar file in the
-right pane and use its build button to compile the matching Rust/WASM parser
-runtime. After the build succeeds, `.clike` and `.talkie` files switch from
-fallback highlighting to parser-backed highlighting.
+the canonical example workspace in `./examples`. Open a configured grammar or
+parser file in the right pane and use its build button to compile the matching
+parser runtime. After the build succeeds, `.clike`, `.hask`, and `.talkie` files
+switch from the plain-text fallback to parser-backed highlighting.
 
 You can also run an external project that contains `palimpsest.toml`:
 
@@ -221,17 +232,55 @@ grammar files, and plain text.
 
 ## Workbench Behavior
 
-The UI has two file browser/editor pairs. The left browser starts at
-`examples_dir`. The right browser starts near the first configured grammar file
-and opens that file when available.
+The UI has two file browser/editor pairs. The left `Examples / Source` pane
+starts at `examples_dir`. The right `Grammar / Parser` pane starts near the
+first configured grammar file and opens that file when available.
 
 Both panes share the same browsing, editing, mode detection, and highlighting
-behavior. Files with configured filetypes switch from fallback highlighting to
-parser-runtime highlighting once their parser module is available.
+behavior. Files with configured filetypes switch from their detected fallback
+highlighter, often plain text for project-specific extensions, to parser-runtime
+highlighting once their parser module is available.
 
 At startup, Palimpsest imports configured runtime modules that already exist. If
-a runtime has not been built yet, the filetype remains usable with fallback
-highlighting until the parser build succeeds.
+a runtime has not been built yet, the filetype remains usable with the detected
+fallback highlighter until the parser build succeeds.
+
+The header health panel reports the loaded config, workspace path, dependency
+checks for configured build presets, parser readiness, and missing runtime
+outputs. Build controls appear on configured grammar/parser files. Build results
+show the command, working directory, exit code, elapsed time, output files, and
+stdout/stderr. Autobuild is debounced and Palimpsest prevents duplicate builds
+for the same parser.
+
+If a pane has unsaved changes, Palimpsest warns before opening another file,
+opening another directory, or closing the page.
+
+## Development Checks
+
+Run the Python tests:
+
+```sh
+uv run python -m unittest
+```
+
+Run the browser-side JavaScript tests:
+
+```sh
+npm test
+```
+
+Run the Rust crate and example parser tests:
+
+```sh
+cargo test --workspace
+```
+
+For a local smoke check, run the app against this repository and open the
+default URL:
+
+```sh
+uv run palimpsest
+```
 
 ## Code Layout
 

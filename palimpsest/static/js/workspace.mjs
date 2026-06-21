@@ -222,12 +222,21 @@ export function createEditorWorkspaceClass(dependencies) {
       ];
 
       const sourceTitle = this.querySelector("[data-source-title]");
+      const browserLabel = this.querySelector("[data-browser-label]");
+      const editorPaneLabel = this.querySelector("[data-editor-pane-label]");
       const sidebar = this.querySelector(".group-sidebar");
       const editorPane = this.querySelector(".editor-pane");
       this.saveButton = this.createSaveButton();
+      this.buildResult = this.querySelector("[data-build-result]");
+      this.buildSummary = this.querySelector("[data-build-summary]");
+      this.buildMeta = this.querySelector("[data-build-meta]");
+      this.buildOutput = this.querySelector("[data-build-output]");
+      this.beforeUnloadHandler = (event) => this.handleBeforeUnload(event);
       const textarea = this.querySelector("[data-editor]");
 
       sourceTitle.id = `${this.dataset.workspace}-source-title`;
+      browserLabel.textContent = this.dataset.browserLabel || "Files";
+      editorPaneLabel.textContent = this.dataset.paneLabel || "Editor";
       sidebar.dataset.region = this.dataset.workspace;
       sidebar.setAttribute("aria-label", `${this.dataset.workspace} files`);
       editorPane.dataset.region = this.dataset.workspace;
@@ -257,11 +266,15 @@ export function createEditorWorkspaceClass(dependencies) {
       this.renderSaveButtonState(false);
       this.saveButton.addEventListener("click", () => this.save());
       this.editor.setToolbar(() => this.renderToolbar(this.context()), this.context());
+      window.addEventListener("beforeunload", this.beforeUnloadHandler);
     }
 
     disconnectedCallback() {
       for (const unsubscribe of this.unsubscribers || []) {
         unsubscribe();
+      }
+      if (this.beforeUnloadHandler) {
+        window.removeEventListener("beforeunload", this.beforeUnloadHandler);
       }
     }
 
@@ -280,11 +293,18 @@ export function createEditorWorkspaceClass(dependencies) {
     }
 
     async openDirectory(path) {
+      if (!this.confirmDiscardUnsavedChanges("open another directory")) {
+        return false;
+      }
       return this.browser.open(path);
     }
 
     async openFile(path) {
+      if (!this.confirmDiscardUnsavedChanges("open another file")) {
+        return false;
+      }
       this.editor.clear(path);
+      this.clearBuildResult();
       this.editor.setToolbar(() => this.renderToolbar(this.context()), this.context());
       graph.emit("editor:file-cleared", { workspace: this });
       this.browser.markActive();
@@ -328,7 +348,8 @@ export function createEditorWorkspaceClass(dependencies) {
       });
 
       if (!response.ok) {
-        this.editor.setStatus("Save failed.");
+        const detail = await response.json().catch(() => null);
+        this.editor.setStatus(detail?.message || detail?.description || "Save failed.");
         return false;
       }
 
@@ -344,6 +365,21 @@ export function createEditorWorkspaceClass(dependencies) {
         mode: this.editor.mode,
       });
       return true;
+    }
+
+    confirmDiscardUnsavedChanges(action) {
+      if (!this.hasUnsavedChanges()) {
+        return true;
+      }
+      return window.confirm(`This pane has unsaved changes. Save or discard them before you ${action}.`);
+    }
+
+    handleBeforeUnload(event) {
+      if (!this.hasUnsavedChanges()) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
     }
 
     resolveFormat(file, mode) {
@@ -465,6 +501,48 @@ export function createEditorWorkspaceClass(dependencies) {
       this.saveButton.title = dirty ? "Unsaved changes" : "No unsaved changes";
     }
 
+    showBuildResult(build) {
+      if (!this.buildResult || !build) {
+        return;
+      }
+
+      this.buildResult.hidden = false;
+      this.buildResult.dataset.ok = build.ok ? "true" : "false";
+      this.buildSummary.textContent = build.ok
+        ? `Build succeeded for ${build.parser} in ${build.elapsed_ms ?? "?"} ms`
+        : `Build failed for ${build.parser}`;
+
+      this.buildMeta.replaceChildren();
+      for (const [label, value] of [
+        ["Command", build.command],
+        ["CWD", build.cwd],
+        ["Exit code", build.returncode ?? "none"],
+        ["Elapsed", `${build.elapsed_ms ?? "?"} ms`],
+        ["Outputs", outputSummary(build.outputs || [])],
+      ]) {
+        const term = document.createElement("dt");
+        const description = document.createElement("dd");
+        term.textContent = label;
+        description.textContent = String(value ?? "");
+        this.buildMeta.append(term, description);
+      }
+
+      const output = [build.stdout, build.stderr].filter(Boolean).join("\n");
+      this.buildOutput.textContent = output || "No build output.";
+      this.buildResult.open = !build.ok;
+    }
+
+    clearBuildResult() {
+      if (!this.buildResult) {
+        return;
+      }
+      this.buildResult.hidden = true;
+      this.buildResult.open = false;
+      this.buildSummary.textContent = "";
+      this.buildMeta.replaceChildren();
+      this.buildOutput.textContent = "";
+    }
+
     handleRuntimeChange(runtimeId) {
       if (!this.editor.file) {
         return;
@@ -497,4 +575,13 @@ export function createEditorWorkspaceClass(dependencies) {
       });
     }
   };
+}
+
+function outputSummary(outputs) {
+  if (!outputs.length) {
+    return "No declared outputs";
+  }
+  return outputs
+    .map((output) => `${output.exists ? "OK" : "Missing"} ${output.path}${output.size ? ` (${output.size} B)` : ""}`)
+    .join(", ");
 }

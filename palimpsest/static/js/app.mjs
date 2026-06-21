@@ -1,4 +1,4 @@
-import { loadGrammarMetadata } from "./api.mjs";
+import { loadGrammarMetadata, loadHealth } from "./api.mjs";
 import { findConfiguredFiletype } from "./configured_filetypes.mjs";
 import { SignalGraph } from "./core/signal_graph.mjs";
 import { CompilerRegistry, FallbackHighlighterRegistry, ModeRegistry, RuntimeRegistry } from "./core/registries.mjs";
@@ -67,6 +67,7 @@ customElements.define(
 initializeWorkspaces();
 
 async function initializeWorkspaces() {
+  renderHealth(await loadHealth());
   grammarFiles = await loadGrammarMetadata();
   grammarFileMap = new Map(grammarFiles.map((file) => [file.path, file]));
   hydrateConfiguredParserRuntimes({ appState, graph, runtimes });
@@ -87,6 +88,63 @@ async function initializeWorkspaces() {
   } else {
     rightWorkspace.editor.clear(rightWorkspace.emptyTitle);
   }
+}
+
+function renderHealth(health) {
+  const panel = document.querySelector("[data-health-panel]");
+  const summary = document.querySelector("[data-health-summary]");
+  const body = document.querySelector("[data-health-body]");
+  if (!panel || !summary || !body) {
+    return;
+  }
+
+  const missingDependencies = (health.dependencies || []).filter((dependency) => !dependency.ok);
+  const missingParsers = (health.parsers || []).filter((parser) => !parser.ok);
+  panel.dataset.ok = health.ok ? "true" : "false";
+  summary.textContent = health.ok
+    ? "Project ready"
+    : `${missingDependencies.length + missingParsers.length || 1} project readiness issue(s)`;
+
+  body.replaceChildren();
+  body.append(
+    healthLine("Config", health.config_path || appState.config_path),
+    healthLine("Workspace", health.cwd || appState.cwd),
+    healthList("Dependencies", health.dependencies || [], (item) =>
+      `${item.ok ? "OK" : "Missing"}: ${item.name}${item.path ? ` (${item.path})` : ""}`,
+    ),
+    healthList("Parsers", health.parsers || [], (parser) =>
+      `${parser.ok ? "OK" : "Needs attention"}: ${parser.id}`,
+    ),
+  );
+}
+
+function healthLine(label, value) {
+  const line = document.createElement("p");
+  line.textContent = `${label}: ${value || "unknown"}`;
+  return line;
+}
+
+function healthList(label, items, renderItem) {
+  const wrapper = document.createElement("div");
+  const title = document.createElement("p");
+  const list = document.createElement("ul");
+
+  title.textContent = label;
+  list.className = "health-list";
+  if (!items.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "No checks";
+    list.append(empty);
+  } else {
+    for (const item of items) {
+      const row = document.createElement("li");
+      row.textContent = renderItem(item);
+      list.append(row);
+    }
+  }
+
+  wrapper.append(title, list);
+  return wrapper;
 }
 
 async function openFirstDirectory(workspace, paths) {

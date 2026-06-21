@@ -49,7 +49,11 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
   compilers.registerInputHandler((context) => {
     const buildContext = parserBuildContext(context, configuredFiletypes);
     if (buildContext && parserBuildSetting(buildContext.parserId).autocompile) {
-      compilers.compile("parser-build", context);
+      const settings = parserBuildSetting(buildContext.parserId);
+      window.clearTimeout(settings.autocompileTimer);
+      settings.autocompileTimer = window.setTimeout(() => {
+        compilers.compile("parser-build", context);
+      }, 500);
     }
   });
 
@@ -65,6 +69,12 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
       const { file, parser, parserId } = buildContext;
       const { workspace } = context;
       const runtimeId = runtimeIdForParser(parserId);
+      const settings = parserBuildSetting(parserId);
+
+      if (settings.building) {
+        workspace.editor.setStatus(`Build already running for ${parserId}.`);
+        return null;
+      }
 
       if (workspace.hasUnsavedChanges?.()) {
         const saved = await workspace.save({ ifDirty: true });
@@ -74,13 +84,23 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
       }
       const activeFile = workspace.editor.file || file;
 
+      settings.building = true;
+      refreshToolbar(workspace);
       workspace.editor.setStatus(`Building ${parserId}...`);
-      const build = await buildParser(parserId);
-      if (!build.ok) {
-        workspace.editor.setStatus(`Build failed for ${parserId}.`);
-        console.error("Palimpsest parser build failed", build);
-        graph.emit("grammar:compile-failed", { workspace, file: activeFile, build, runtimeId });
-        return null;
+      let build;
+      try {
+        build = await buildParser(parserId);
+        settings.lastBuild = build;
+        workspace.showBuildResult?.(build);
+        if (!build.ok) {
+          workspace.editor.setStatus(`Build failed for ${parserId}.`);
+          console.error("Palimpsest parser build failed", build);
+          graph.emit("grammar:compile-failed", { workspace, file: activeFile, build, runtimeId });
+          return null;
+        }
+      } finally {
+        settings.building = false;
+        refreshToolbar(workspace);
       }
 
       if (!parser.runtime?.module) {
@@ -131,8 +151,10 @@ function parserBuildToolbar(context, graph, compilers, configuredFiletypes) {
   const compileButton = document.createElement("button");
   compileButton.className = "text-button compact";
   compileButton.type = "button";
-  compileButton.textContent = `Build ${parserId}`;
+  compileButton.textContent = settings.building ? `Building ${parserId}` : `Build ${parserId}`;
   compileButton.title = parser.build.command;
+  compileButton.disabled = settings.building;
+  compileButton.setAttribute("aria-busy", settings.building ? "true" : "false");
   compileButton.addEventListener("click", () => compilers.compile("parser-build", context));
 
   const label = document.createElement("label");
@@ -150,7 +172,9 @@ function parserBuildToolbar(context, graph, compilers, configuredFiletypes) {
   });
 
   const text = document.createElement("span");
-  text.textContent = "Autobuild";
+  text.textContent = settings.lastBuild
+    ? `Autobuild (${settings.lastBuild.ok ? "last OK" : "last failed"})`
+    : "Autobuild";
 
   label.append(checkbox, text);
   fragment.append(compileButton, label);
@@ -177,9 +201,22 @@ function parserBuildContext(context, configuredFiletypes) {
 
 function parserBuildSetting(parserId) {
   if (!parserBuildSettings.has(parserId)) {
-    parserBuildSettings.set(parserId, { autocompile: false });
+    parserBuildSettings.set(parserId, {
+      autocompile: false,
+      autocompileTimer: null,
+      building: false,
+      lastBuild: null,
+    });
   }
   return parserBuildSettings.get(parserId);
+}
+
+function refreshToolbar(workspace) {
+  if (!workspace?.editor) {
+    return;
+  }
+  const context = workspace.context();
+  workspace.editor.setToolbar(() => workspace.renderToolbar(context), context);
 }
 
 function createMajorMode({ id, label, adapters = [], filenames = [], extensions = [], highlighterId, toolbar, compilerId, onInput }) {
