@@ -2,9 +2,10 @@ import { loadGrammarMetadata } from "./api.mjs";
 import { SignalGraph } from "./core/signal_graph.mjs";
 import { CompilerRegistry, FallbackHighlighterRegistry, ModeRegistry, RuntimeRegistry } from "./core/registries.mjs";
 import { normalizeConfiguredFiletypes, registerConfiguredFiletypeHighlighters } from "./configured_filetypes.mjs";
-import { highlightPlain, highlightSourceLike } from "./highlight/tokenizer.mjs";
+import { highlightPlain } from "./highlight/tokenizer.mjs";
 import { registerFallbackHighlighters } from "./highlight/fallbacks.mjs";
 import { registerModes } from "./modes/index.mjs";
+import { hydrateConfiguredParserRuntimes, registerConfiguredParserRuntimes } from "./parser_runtimes.mjs";
 import { parentPath } from "./utils/path.mjs";
 import { createEditorWorkspaceClass } from "./workspace.mjs";
 
@@ -36,14 +37,7 @@ graph.on("editor:file-opened", ({ detail }) => {
   graph.set("openedFormats", openedFormats);
 });
 
-runtimes.register({
-  id: "project-format",
-  version: 0,
-  grammarPath: "",
-  label: "Project format",
-  highlight: highlightSourceLike,
-  ready: false,
-});
+registerConfiguredParserRuntimes({ appState, runtimes });
 
 registerFallbackHighlighters(fallbackHighlighters);
 registerConfiguredFiletypeHighlighters(fallbackHighlighters, configuredFiletypes, highlightPlain);
@@ -74,6 +68,7 @@ initializeWorkspaces();
 async function initializeWorkspaces() {
   grammarFiles = await loadGrammarMetadata();
   grammarFileMap = new Map(grammarFiles.map((file) => [file.path, file]));
+  hydrateConfiguredParserRuntimes({ appState, graph, runtimes });
 
   const leftWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="left"]');
   const rightWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="right"]');

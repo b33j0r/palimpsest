@@ -54,7 +54,9 @@ Editors resolve a major mode when a file opens. Major modes own behavior: toolba
 
 That fallback registry is extensible and config-aware. It includes lightweight built-in tokenizers for common formats such as Rust, C, Python, Scheme, INI/TOML-style config, JavaScript/TypeScript, CSS, Pest, Lezer, Tree-sitter grammar files, and plain text. Configured filetypes such as `*.mscm` are also registered, so project-defined languages participate in the same mode/highlighter pipeline instead of being hardcoded into the app.
 
-The Pest major mode provides `Compile` and `Autocompile` controls. Compilation calls the configured server-side build command, serves the configured wasm-bindgen runtime module from the project directory, imports it in the browser, and updates a parser-scoped runtime such as `parser:mscm`. Source files with configured filetypes switch into project-format mode when their parser runtime is ready, so highlighting comes from the loaded wasm parser rather than from a fallback tokenizer.
+Configured parser runtimes are parser-scoped, such as `parser:mscm`. On startup, Palimpsest attempts to import each configured runtime module that already exists, so source files can enter project-format mode without a manual compile. If an artifact is missing or stale, the runtime stays unavailable and configured filetypes continue using their fallback highlighter.
+
+The Pest major mode provides `Compile` and `Autocompile` controls. Compilation calls the configured server-side build command, serves the configured wasm-bindgen runtime module from the project directory, imports it in the browser through the same parser-runtime loader, and updates the parser-scoped runtime. Source files with configured filetypes switch into project-format mode when their parser runtime is ready, so highlighting comes from the loaded wasm parser rather than from a fallback tokenizer.
 
 ## Code Shape
 
@@ -66,4 +68,5 @@ The Pest major mode provides `Compile` and `Autocompile` controls. Compilation c
 - `palimpsest/static/js/core/` contains signal and registry primitives.
 - `palimpsest/static/js/highlight/` contains fallback tokenizers.
 - `palimpsest/static/js/modes/` contains major-mode and compiler wiring.
+- `palimpsest/static/js/parser_runtimes.mjs` contains configured parser runtime registration and loading.
 - `palimpsest/static/js/workspace.mjs` contains the reusable browser/editor custom element.
