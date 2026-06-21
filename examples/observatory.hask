@@ -1,0 +1,12 @@
+module Observatory
+
+import Sky.Clock
+
+type Signal = Dim | Bright | Blinding
+
+calibrate : Int -> Int -> Int
+calibrate signal offset = let adjusted = signal + offset in if adjusted > 100 then adjusted else 100
+
+describe : Signal -> Text
+describe signal = case signal of Dim -> "dim"; Bright -> "bright"; Blinding -> "too bright"
+

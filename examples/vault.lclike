@@ -1,5 +1,0 @@
-fn unlock(code: Int, attempt: Int) -> Int {
-  let score: Int = code == attempt;
-  return score;
-}
-

@@ -1,0 +1,47 @@
+@top Program { line* }
+
+line { BlankLine | ModuleDecl lineEnd | ImportDecl lineEnd | TypeDecl lineEnd | Signature lineEnd | Equation lineEnd }
+BlankLine { Newline }
+lineEnd { Newline }
+
+ModuleDecl { kw<"module"> ModuleName }
+ImportDecl { kw<"import"> ModuleName }
+ModuleName { UpperIdentifier ("." UpperIdentifier)* }
+
+TypeDecl { kw<"type"> TypeName "=" Constructor ("|" Constructor)* }
+TypeName { UpperIdentifier }
+Constructor { UpperIdentifier }
+
+Signature { FunctionName ":" TypeExpr }
+FunctionName { Identifier }
+TypeExpr { TypeAtom ("->" TypeAtom)* }
+TypeAtom { TypeName | "[" TypeName "]" }
+
+Equation { FunctionName pattern* "=" Expr }
+pattern { Identifier | Constructor | Number | "_" }
+
+Expr { IfExpr | LetExpr | CaseExpr | BinaryExpr }
+IfExpr { kw<"if"> BinaryExpr kw<"then"> Expr kw<"else"> Expr }
+LetExpr { kw<"let"> Identifier "=" Expr kw<"in"> Expr }
+CaseExpr { kw<"case"> BinaryExpr kw<"of"> CaseAlt (";" CaseAlt)* }
+CaseAlt { Constructor "->" BinaryExpr }
+BinaryExpr { ApplyExpr (Operator ApplyExpr)* }
+ApplyExpr { atom+ }
+atom { Identifier | Constructor | Number | String | ListExpr | "(" Expr ")" }
+ListExpr { "[" (Expr ("," Expr)*)? "]" }
+
+kw<term> { @specialize[@name={term}]<Identifier, term> }
+
+@tokens {
+  Identifier { $[a-z] $[A-Za-z0-9_']* }
+  UpperIdentifier { $[A-Z] $[A-Za-z0-9_']* }
+  Number { $[0-9]+ }
+  String { '"' (!["\\] | "\\" _)* '"' }
+  Operator { "+" | "-" | "*" | "/" | ">" | "<" | "==" | "++" }
+  LineComment { "--" ![\n]* }
+  Newline { "\n"+ }
+  space { $[ \t\r]+ }
+  @precedence { LineComment, Operator }
+}
+
+@skip { space | LineComment }

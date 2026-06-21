@@ -1,8 +1,0 @@
-fn water(beds: Int, minutes: Int) -> Int {
-  let total: Int = beds * minutes;
-  while (total < 60) {
-    total;
-  }
-  return total;
-}
-

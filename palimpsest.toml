@@ -11,21 +11,26 @@ comment = "comment"
 operator = "operator"
 punctuation = "punctuation"
 
-[capture_maps.clike_lezer]
-fn = "keyword"
+[capture_maps.hask]
+module = "keyword"
+import = "keyword"
+type = "keyword"
 let = "keyword"
-return = "keyword"
+in = "keyword"
 if = "keyword"
+then = "keyword"
 else = "keyword"
-while = "keyword"
-Type = "type"
+case = "keyword"
+of = "keyword"
+TypeName = "type"
+Constructor = "type"
 FunctionName = "function"
-Callee = "function"
-VariableName = "variable"
 Identifier = "variable"
+UpperIdentifier = "type"
 Number = "number"
 String = "string"
 LineComment = "comment"
+Operator = "operator"
 
 [capture_maps.talkie]
 class = "type"
@@ -61,15 +66,15 @@ package = "clike-nom"
 [parsers.clike_nom.runtime]
 parse_export = "parse_to_json"
 
-[[parsers.clike_lezer]]
+[[parsers.hask_lezer]]
 adapter = "lezer"
-grammar_files = ["./examples/clike-lezer/src/clike.grammar"]
-highlight_captures = "clike_lezer"
+grammar_files = ["./examples/hask-lezer/src/hask.grammar"]
+highlight_captures = "hask"
 
-[parsers.clike_lezer.build]
+[parsers.hask_lezer.build]
 preset = "lezer"
 
-[parsers.clike_lezer.runtime]
+[parsers.hask_lezer.runtime]
 parse_export = "parser"
 
 [[filetypes.clike]]
@@ -82,7 +87,7 @@ extensions = ["*.talkie"]
 parser = "talkie_pest"
 highlight_captures = "talkie"
 
-[[filetypes.lclike]]
-extensions = ["*.lclike"]
-parser = "clike_lezer"
-highlight_captures = "clike_lezer"
+[[filetypes.hask]]
+extensions = ["*.hask"]
+parser = "hask_lezer"
+highlight_captures = "hask"

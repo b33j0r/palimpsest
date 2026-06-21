@@ -1,9 +1,0 @@
-fn calibrate(signal: Int, offset: Int) -> Int {
-  // keep high readings visible in the output
-  let adjusted: Int = signal + offset;
-  if (adjusted > 100) {
-    return adjusted;
-  } else {
-    return 100;
-  }
-}

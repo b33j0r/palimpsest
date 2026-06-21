@@ -1,0 +1,12 @@
+module Garden.Plan
+
+import Weather.Rain
+
+type Bed = Seedling | Bloom | Fallow
+
+water : Bed -> Int -> Text
+water bed minutes = case bed of Seedling -> "mist"; Bloom -> "soak"; Fallow -> "wait"
+
+schedule : Int -> Int
+schedule beds = let minutes = beds * 8 in minutes + 5
+

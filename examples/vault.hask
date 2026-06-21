@@ -1,0 +1,12 @@
+module Vault.Keys
+
+import Archive.Seal
+
+type Door = Locked | Listening | Open
+
+unlock : Door -> Int -> Text
+unlock door code = case door of Locked -> "turn"; Listening -> "speak"; Open -> "enter"
+
+score : Int -> Int -> Int
+score code attempt = if code == attempt then 1 else 0
+

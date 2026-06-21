@@ -97,19 +97,19 @@ Sample files:
 
 - `examples/observatory.clike`, `examples/garden.clike`, and
   `examples/vault.clike` use the C-like demo language.
-- `examples/observatory.lclike`, `examples/garden.lclike`, and
-  `examples/vault.lclike` use the same C-like demo language through Lezer.
+- `examples/observatory.hask`, `examples/garden.hask`, and
+  `examples/vault.hask` use a Haskell-inspired demo language through Lezer.
 - `examples/observatory.talkie`, `examples/garden.talkie`, and
   `examples/vault.talkie` use Talkie, a Smalltalk-inspired demo language.
 
 Parser runtimes:
 
 - `examples/clike-nom/` implements the `.clike` runtime with Nom.
-- `examples/clike-lezer/` implements the `.lclike` runtime with Lezer.
+- `examples/hask-lezer/` implements the `.hask` runtime with Lezer.
 - `examples/talkie-pest/` implements the `.talkie` runtime with Pest.
 
-The root `palimpsest.toml` maps `*.clike` to `clike_nom`, `*.lclike` to
-`clike_lezer`, and `*.talkie` to `talkie_pest`, so each parser can be seen
+The root `palimpsest.toml` maps `*.clike` to `clike_nom`, `*.hask` to
+`hask_lezer`, and `*.talkie` to `talkie_pest`, so each parser can be seen
 independently in the workbench.
 
 ## Project Configuration
