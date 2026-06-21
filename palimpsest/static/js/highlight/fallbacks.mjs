@@ -1,5 +1,6 @@
 import { highlightPlain, javascriptGrammar, sourceGrammar, tokenize } from "./tokenizer.mjs";
 import { createLibraryHighlighter } from "./library.mjs";
+import { highlightLezerGrammar } from "./lezer_grammar.mjs";
 
 export function registerFallbackHighlighters(registry) {
   registry.register(createTokenHighlighter({
@@ -16,19 +17,12 @@ export function registerFallbackHighlighters(registry) {
     },
   }));
 
-  registry.register(createTokenHighlighter({
+  registry.register({
     id: "lezer",
     label: "Lezer",
-    adapters: ["lezer"],
-    extensions: [".grammar"],
-    grammar: {
-      lineComment: "@comment",
-      strings: new Set(['"', "'"]),
-      ruleAssignment: true,
-      keywords: new Set(["@top", "@tokens", "@skip", "@detectDelim", "@precedence", "@external"]),
-      operators: new Set(["{", "}", "(", ")", "[", "]", "=", "|", "*", "+", "?", "/", ",", "."]),
-    },
-  }));
+    match: (file) => file.adapter === "lezer" || file.suffix === ".grammar",
+    highlight: highlightLezerGrammar,
+  });
 
   registry.register(createTokenHighlighter({
     id: "tree-sitter",
