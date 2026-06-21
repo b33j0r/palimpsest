@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { findConfiguredFiletype, normalizeConfiguredFiletypes } from "../../palimpsest/static/js/configured_filetypes.mjs";
-import { parserRuntimeModuleUrl } from "../../palimpsest/static/js/api.mjs";
+import { parserRuntimeAssetUrl, parserRuntimeModuleUrl } from "../../palimpsest/static/js/api.mjs";
 
 test("normalizes matching parser ids for filetypes with grammar files", () => {
   const filetypes = normalizeConfiguredFiletypes({
@@ -40,4 +40,10 @@ test("parser runtime URLs are scoped to parser id and module filename", () => {
   const url = parserRuntimeModuleUrl("demo/parser", "/tmp/target/parser.js");
 
   assert.match(url, /^\/api\/parsers\/demo%2Fparser\/runtime\/parser\.js\?v=/);
+});
+
+test("parser runtime asset URLs are scoped to parser id and asset filename", () => {
+  const url = parserRuntimeAssetUrl("demo/parser", "parser.wasm");
+
+  assert.equal(url, "/api/parsers/demo%2Fparser/runtime/parser.wasm");
 });

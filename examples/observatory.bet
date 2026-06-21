@@ -1,0 +1,16 @@
+// Trend-following study for a quiet overnight session.
+Inputs: FastLength(9), SlowLength(21), RiskContracts(2);
+Vars: FastAverage(0), SlowAverage(0), SessionReady(False);
+
+FastAverage = Average(Close, FastLength);
+SlowAverage = Average(Close, SlowLength);
+SessionReady = Time >= 930 And Time <= 1500;
+
+If SessionReady And FastAverage Crosses Over SlowAverage Then
+  Buy ("DawnBreak") RiskContracts Contracts Next Bar At Market;
+
+If FastAverage Crosses Under SlowAverage Then
+  Sell ("DawnBreakExit") From Entry Next Bar At Market;
+
+Plot1(FastAverage, "Fast");
+Plot2(SlowAverage, "Slow");

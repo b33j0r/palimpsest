@@ -42,6 +42,45 @@ comment = "comment"
 operator = "operator"
 punctuation = "punctuation"
 
+[capture_maps.bet]
+Inputs = "keyword"
+Vars = "keyword"
+Variables = "keyword"
+Method = "keyword"
+Begin = "keyword"
+End = "keyword"
+If = "keyword"
+Then = "keyword"
+Else = "keyword"
+For = "keyword"
+To = "keyword"
+While = "keyword"
+Buy = "keyword"
+Sell = "keyword"
+SellShort = "keyword"
+BuyToCover = "keyword"
+Next = "keyword"
+This = "keyword"
+Bar = "keyword"
+At = "keyword"
+On = "keyword"
+Market = "keyword"
+From = "keyword"
+Entry = "keyword"
+Contracts = "keyword"
+Return = "keyword"
+And = "operator"
+Or = "operator"
+Not = "operator"
+Crosses = "operator"
+Over = "operator"
+Under = "operator"
+function_name = "function"
+identifier = "variable"
+number = "number"
+string = "string"
+comment = "comment"
+
 [[parsers.talkie_pest]]
 adapter = "pest"
 grammar_files = ["./examples/talkie-pest/src/talkie.pest"]
@@ -76,6 +115,19 @@ preset = "lezer"
 
 [parsers.hask_lezer.runtime]
 parse_export = "parser"
+
+[[parsers.bet_tree_sitter]]
+adapter = "tree-sitter"
+grammar_files = ["./examples/bet-tree-sitter/grammar.js"]
+highlight_captures = "bet"
+
+[parsers.bet_tree_sitter.build]
+preset = "tree-sitter"
+
+[[filetypes.bet]]
+extensions = ["*.bet"]
+parser = "bet_tree_sitter"
+highlight_captures = "bet"
 
 [[filetypes.clike]]
 extensions = ["*.clike"]

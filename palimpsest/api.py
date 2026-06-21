@@ -428,7 +428,7 @@ def _dependencies_for_build(parser) -> list[dict]:
     names = []
     if parser.build.preset == "cargo-wasm-bindgen":
         names = ["cargo", "wasm-bindgen"]
-    elif parser.build.preset == "lezer":
+    elif parser.build.preset in {"lezer", "tree-sitter"}:
         names = ["npx"]
     elif isinstance(parser.build.command, list) and parser.build.command:
         names = [parser.build.command[0]]

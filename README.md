@@ -16,10 +16,12 @@ Features:
 - Build Rust parser runtimes from the browser with the `cargo-wasm-bindgen`
   preset.
 - Build Lezer parser runtimes from the browser with the `lezer` preset.
+- Build Tree-sitter parser runtimes from the browser with the `tree-sitter`
+  preset.
 - Review parser build commands, exit codes, stdout/stderr, elapsed time, and
   declared outputs without opening browser developer tools.
 - Connect parser/highlighting runtimes through a small JSON token interface,
-  with included Nom, Pest, and Lezer examples.
+  with included Nom, Pest, Lezer, and Tree-sitter examples.
 - Use fallback highlighting for common source and grammar files.
 
 ## Requirements
@@ -49,6 +51,11 @@ Palimpsest UI, install Node.js and install the repository's npm dependencies:
 ```sh
 npm install
 ```
+
+The Tree-sitter example also uses the repository's npm dependencies. Building
+Tree-sitter parser WASM through the Palimpsest UI requires whatever compiler
+tooling `tree-sitter build --wasm` needs on your platform; the CLI can download
+or use a local WASI/Emscripten toolchain.
 
 Palimpsest can still open configured example files before those parser runtimes
 are built. Until the matching runtime loads, the custom-language examples render
@@ -80,8 +87,9 @@ environment.
 The repository root contains `palimpsest.toml`, so running Palimpsest here opens
 the canonical example workspace in `./examples`. Open a configured grammar or
 parser file in the right pane and use its build button to compile the matching
-parser runtime. After the build succeeds, `.clike`, `.hask`, and `.talkie` files
-switch from the plain-text fallback to parser-backed highlighting.
+parser runtime. After the build succeeds, `.bet`, `.clike`, `.hask`, and
+`.talkie` files switch from the plain-text fallback to parser-backed
+highlighting.
 
 You can also run an external project that contains `palimpsest.toml`:
 
@@ -108,6 +116,8 @@ Sample files:
 
 - `examples/observatory.clike`, `examples/garden.clike`, and
   `examples/vault.clike` use the C-like demo language.
+- `examples/observatory.bet`, `examples/garden.bet`, and `examples/vault.bet`
+  use BET, an EasyLanguage/PowerLanguage-inspired trading strategy language.
 - `examples/observatory.hask`, `examples/garden.hask`, and
   `examples/vault.hask` use a Haskell-inspired demo language through Lezer.
 - `examples/observatory.talkie`, `examples/garden.talkie`, and
@@ -116,12 +126,13 @@ Sample files:
 Parser runtimes:
 
 - `examples/clike-nom/` implements the `.clike` runtime with Nom.
+- `examples/bet-tree-sitter/` implements the `.bet` runtime with Tree-sitter.
 - `examples/hask-lezer/` implements the `.hask` runtime with Lezer.
 - `examples/talkie-pest/` implements the `.talkie` runtime with Pest.
 
-The root `palimpsest.toml` maps `*.clike` to `clike_nom`, `*.hask` to
-`hask_lezer`, and `*.talkie` to `talkie_pest`, so each parser can be seen
-independently in the workbench.
+The root `palimpsest.toml` maps `*.bet` to `bet_tree_sitter`, `*.clike` to
+`clike_nom`, `*.hask` to `hask_lezer`, and `*.talkie` to `talkie_pest`, so each
+parser can be seen independently in the workbench.
 
 ## Project Configuration
 
@@ -212,6 +223,24 @@ The preset runs `lezer-generator`, bundles the generated parser with `esbuild`,
 and derives `runtime.module` as `target/palimpsest/<parser>/parser.js`. The
 runtime export should be the Lezer parser object; Palimpsest walks its syntax
 tree and emits tokens for node names present in the configured capture map.
+
+For Tree-sitter grammars, use the `tree-sitter` preset:
+
+```toml
+[[parsers.my_tree_sitter_language]]
+adapter = "tree-sitter"
+grammar_files = ["./src/grammar.js"]
+highlight_captures = "my_language"
+
+[parsers.my_tree_sitter_language.build]
+preset = "tree-sitter"
+```
+
+The preset runs `tree-sitter generate`, builds the generated parser to WASM with
+`tree-sitter build --wasm`, bundles the `web-tree-sitter` runtime with
+`esbuild`, and derives `runtime.module` as
+`target/palimpsest/<parser>/parser.js`. Palimpsest walks the syntax tree and
+emits tokens for node names present in the configured capture map.
 
 ## Highlighting
 

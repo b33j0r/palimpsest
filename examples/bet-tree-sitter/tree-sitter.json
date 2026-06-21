@@ -1,0 +1,22 @@
+{
+  "grammars": [
+    {
+      "name": "bet",
+      "camelcase": "Bet",
+      "scope": "source.bet",
+      "file-types": [
+        "bet"
+      ]
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "BET, an EasyLanguage-inspired Palimpsest Tree-sitter example",
+    "authors": [
+      {
+        "name": "Palimpsest"
+      }
+    ]
+  }
+}

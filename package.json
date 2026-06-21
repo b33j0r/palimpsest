@@ -8,6 +8,8 @@
   "devDependencies": {
     "@lezer/generator": "1.8.0",
     "@lezer/lr": "1.4.0",
-    "esbuild": "0.27.2"
+    "esbuild": "0.27.2",
+    "tree-sitter-cli": "0.26.9",
+    "web-tree-sitter": "0.26.9"
   }
 }

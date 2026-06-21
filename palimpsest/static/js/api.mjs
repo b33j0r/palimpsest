@@ -46,5 +46,9 @@ export async function buildParser(parserId) {
 export function parserRuntimeModuleUrl(parserId, modulePath) {
   const moduleName = modulePath.split("/").pop();
   const cacheKey = Date.now().toString(36);
-  return `/api/parsers/${encodeURIComponent(parserId)}/runtime/${encodeURIComponent(moduleName)}?v=${cacheKey}`;
+  return `${parserRuntimeAssetUrl(parserId, moduleName)}?v=${cacheKey}`;
+}
+
+export function parserRuntimeAssetUrl(parserId, filename) {
+  return `/api/parsers/${encodeURIComponent(parserId)}/runtime/${encodeURIComponent(filename)}`;
 }

@@ -1,5 +1,6 @@
 import { loadWasmParserRuntime } from "./highlight/wasm_runtime.mjs";
 import { loadLezerParserRuntime } from "./highlight/lezer_runtime.mjs";
+import { loadTreeSitterParserRuntime } from "./highlight/tree_sitter_runtime.mjs";
 
 export function registerConfiguredParserRuntimes({ appState, runtimes }) {
   for (const parser of parserRuntimeConfigs(appState)) {
@@ -87,6 +88,9 @@ function parserRuntimeConfigs(appState) {
 function loadParserRuntime({ parser, captureMap }) {
   if (parser.adapter === "lezer") {
     return loadLezerParserRuntime({ parser, captureMap });
+  }
+  if (parser.adapter === "tree-sitter") {
+    return loadTreeSitterParserRuntime({ parser, captureMap });
   }
   return loadWasmParserRuntime({ parser, captureMap });
 }

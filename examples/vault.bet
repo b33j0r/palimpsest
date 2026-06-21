@@ -1,0 +1,23 @@
+// Breakout rules with a small helper method.
+Inputs: RangeLength(20), BufferTicks(2), TradeSize(1);
+Vars: BreakoutHigh(0), BreakoutLow(0), FilterReady(False);
+
+Method VolatilityReady(Threshold(1.25)) Begin
+  Return Average(TrueRange, RangeLength) > Threshold;
+End;
+
+BreakoutHigh = Highest(High, RangeLength) + BufferTicks * MinMove;
+BreakoutLow = Lowest(Low, RangeLength) - BufferTicks * MinMove;
+FilterReady = VolatilityReady(1.25);
+
+If FilterReady And Close > BreakoutHigh Then
+  Buy ("VaultLong") TradeSize Contracts Next Bar At Market;
+
+If FilterReady And Close < BreakoutLow Then
+  SellShort ("VaultShort") TradeSize Contracts Next Bar At Market;
+
+If MarketPosition = 1 And Close Crosses Under BreakoutHigh Then
+  Sell ("VaultLongExit") From Entry Next Bar At Market;
+
+If MarketPosition = -1 And Close Crosses Over BreakoutLow Then
+  BuyToCover ("VaultShortExit") From Entry Next Bar At Market;

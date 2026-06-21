@@ -1,0 +1,20 @@
+// Mean-reversion strategy tuned for range-bound symbols.
+Inputs: Lookback(14), EntryBand(1.5), ExitBand(0.25);
+Vars: CenterLine(0), UpperBand(0), LowerBand(0), Stretch(0);
+
+CenterLine = Average(Close, Lookback);
+Stretch = StandardDev(Close, Lookback);
+UpperBand = CenterLine + EntryBand * Stretch;
+LowerBand = CenterLine - EntryBand * Stretch;
+
+If Close < LowerBand Then
+  Buy ("LowerBed") 1 Contracts Next Bar At Market;
+
+If Close > UpperBand Then
+  SellShort ("UpperBed") 1 Contracts Next Bar At Market;
+
+If Close Crosses Over CenterLine Then
+  Sell ("LowerBedExit") From Entry Next Bar At Market;
+
+If Close Crosses Under CenterLine Then
+  BuyToCover ("UpperBedExit") From Entry Next Bar At Market;

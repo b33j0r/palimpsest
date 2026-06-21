@@ -284,6 +284,103 @@ class BuildPresetConfigTests(unittest.TestCase):
         self.assertEqual(parser.runtime.module.as_posix(), "target/custom/runtime.js")
         self.assertEqual(parser.runtime.parse_export, "customParser")
 
+    def test_tree_sitter_preset_derives_build_paths(self):
+        config = ProjectConfig.model_validate({
+            "parsers": {
+                "demo": {
+                    "adapter": "tree-sitter",
+                    "grammar_files": ["src/grammar.js"],
+                    "build": {
+                        "preset": "tree-sitter",
+                    },
+                },
+            },
+        })
+
+        parser = config.parsers[0]
+
+        self.assertEqual(
+            parser.build.display_command(),
+            "mkdir -p target/palimpsest/demo && "
+            "sh -c 'cd src && npx tree-sitter generate grammar.js' && "
+            "sh -c 'cd src && npx tree-sitter build --wasm -o ../target/palimpsest/demo/parser.wasm .' && "
+            "npx esbuild palimpsest/static/js/highlight/tree_sitter_runtime_entry.mjs "
+            "--bundle --format=esm --outfile=target/palimpsest/demo/parser.js "
+            "--external:fs --external:module --external:node:module && "
+            "cp node_modules/web-tree-sitter/web-tree-sitter.wasm "
+            "target/palimpsest/demo/web-tree-sitter.wasm",
+        )
+        self.assertEqual(parser.runtime.parse_export, "createTreeSitterRuntime")
+        self.assertEqual(
+            [path.as_posix() for path in parser.build.outputs],
+            [
+                "src/src/parser.c",
+                "src/src/grammar.json",
+                "src/src/node-types.json",
+                "target/palimpsest/demo/parser.wasm",
+                "target/palimpsest/demo/parser.js",
+                "target/palimpsest/demo/web-tree-sitter.wasm",
+            ],
+        )
+        self.assertEqual(parser.runtime.module.as_posix(), "target/palimpsest/demo/parser.js")
+
+    def test_tree_sitter_preset_accepts_overrides(self):
+        config = ProjectConfig.model_validate({
+            "parsers": {
+                "demo": {
+                    "adapter": "tree-sitter",
+                    "grammar_files": ["src/grammar.js"],
+                    "build": {
+                        "preset": "tree-sitter",
+                        "grammar": "grammars/demo/grammar.js",
+                        "out_dir": "target/custom",
+                        "out_name": "demo",
+                    },
+                    "runtime": {
+                        "module": "target/custom/runtime.js",
+                        "parse_export": "customFactory",
+                    },
+                },
+            },
+        })
+
+        parser = config.parsers[0]
+
+        self.assertEqual(
+            parser.build.preset_commands(),
+            [
+                ["mkdir", "-p", "target/custom"],
+                [
+                    "sh",
+                    "-c",
+                    "cd grammars/demo && npx tree-sitter generate grammar.js",
+                ],
+                [
+                    "sh",
+                    "-c",
+                    "cd grammars/demo && npx tree-sitter build --wasm -o ../../target/custom/demo.wasm .",
+                ],
+                [
+                    "npx",
+                    "esbuild",
+                    "palimpsest/static/js/highlight/tree_sitter_runtime_entry.mjs",
+                    "--bundle",
+                    "--format=esm",
+                    "--outfile=target/custom/demo.js",
+                    "--external:fs",
+                    "--external:module",
+                    "--external:node:module",
+                ],
+                [
+                    "cp",
+                    "node_modules/web-tree-sitter/web-tree-sitter.wasm",
+                    "target/custom/web-tree-sitter.wasm",
+                ],
+            ],
+        )
+        self.assertEqual(parser.runtime.module.as_posix(), "target/custom/runtime.js")
+        self.assertEqual(parser.runtime.parse_export, "customFactory")
+
     def test_cargo_wasm_bindgen_preset_requires_package(self):
         with self.assertRaises(pydantic.ValidationError) as error:
             ProjectConfig.model_validate({
@@ -312,6 +409,21 @@ class BuildPresetConfigTests(unittest.TestCase):
             })
 
         self.assertIn("uses lezer build preset without grammar_files", str(error.exception))
+
+    def test_tree_sitter_preset_requires_grammar_file(self):
+        with self.assertRaises(pydantic.ValidationError) as error:
+            ProjectConfig.model_validate({
+                "parsers": {
+                    "demo": {
+                        "adapter": "tree-sitter",
+                        "build": {
+                            "preset": "tree-sitter",
+                        },
+                    },
+                },
+            })
+
+        self.assertIn("uses tree-sitter build preset without grammar_files", str(error.exception))
 
 
 if __name__ == "__main__":
