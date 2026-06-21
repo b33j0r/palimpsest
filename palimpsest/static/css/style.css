@@ -288,7 +288,11 @@ h2 {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 240px minmax(320px, 1fr) 240px minmax(320px, 1fr);
+  grid-template-columns:
+    var(--left-sidebar-width, 240px)
+    minmax(320px, var(--left-editor-width, 1fr))
+    var(--right-sidebar-width, 240px)
+    minmax(320px, 1fr);
   min-width: 0;
   min-height: 0;
 }
@@ -305,15 +309,89 @@ palimpsest-editor-workspace {
 }
 
 .group-sidebar {
+  position: relative;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   background: var(--panel);
 }
 
 .editor-pane {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: #191b1f;
+}
+
+.resize-handle {
+  position: absolute;
+  top: 0;
+  right: -6px;
+  bottom: 0;
+  z-index: 6;
+  width: 11px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resize-handle::before {
+  position: absolute;
+  top: 0;
+  right: 5px;
+  bottom: 0;
+  width: 1px;
+  background: transparent;
+  content: "";
+}
+
+.resize-handle::after {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  width: 5px;
+  height: 44px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      to bottom,
+      transparent 0 6px,
+      color-mix(in srgb, var(--muted) 44%, transparent) 6px 8px,
+      transparent 8px 14px
+    );
+  background-size: 5px 14px;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease, background-color 120ms ease;
+  content: "";
+}
+
+.resize-handle:hover::before,
+.resize-handle:focus-visible::before,
+.resize-handle[data-active="true"]::before {
+  background: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+.resize-handle:hover::after,
+.resize-handle:focus-visible::after,
+.resize-handle[data-active="true"]::after {
+  background-color: #242830;
+  opacity: 1;
+}
+
+.resize-handle:focus-visible {
+  outline: 0;
+}
+
+.resize-handle-editor::before {
+  background: color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+html[data-resizing="true"],
+html[data-resizing="true"] * {
+  cursor: col-resize !important;
+  user-select: none;
 }
 
 .pane-label {
@@ -721,6 +799,10 @@ palimpsest-editor-workspace {
   .app-shell {
     grid-template-columns: minmax(160px, 34vw) minmax(0, 1fr);
     overflow: auto;
+  }
+
+  .resize-handle {
+    display: none;
   }
 
   palimpsest-editor-workspace {

@@ -63,7 +63,198 @@ customElements.define(
     }),
 );
 
+initializeResizableEditorLayout();
 initializeWorkspaces();
+
+function initializeResizableEditorLayout() {
+    const shell = document.querySelector(".app-shell");
+    const leftWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="left"]');
+    const rightWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="right"]');
+
+    if (!shell || !leftWorkspace || !rightWorkspace) {
+        return;
+    }
+
+    const layout = readEditorLayout();
+    applyLayoutValue(shell, "--left-sidebar-width", layout.leftSidebarWidth);
+    applyLayoutValue(shell, "--right-sidebar-width", layout.rightSidebarWidth);
+    applyLayoutValue(shell, "--left-editor-width", layout.leftEditorWidth);
+    constrainEditorLayout(shell);
+
+    const leftSidebar = leftWorkspace.querySelector(".group-sidebar");
+    const leftEditor = leftWorkspace.querySelector(".editor-pane");
+    const rightSidebar = rightWorkspace.querySelector(".group-sidebar");
+
+    if (leftSidebar) {
+        installResizeHandle(leftSidebar, {
+            label: "Resize examples file list",
+            className: "resize-handle-sidebar",
+            onStart: () => leftSidebar.getBoundingClientRect().width,
+            onResize: (startWidth, deltaX) => {
+                setSidebarWidth(shell, "left", startWidth + deltaX);
+            },
+        });
+    }
+
+    if (rightSidebar) {
+        installResizeHandle(rightSidebar, {
+            label: "Resize grammar file list",
+            className: "resize-handle-sidebar",
+            onStart: () => rightSidebar.getBoundingClientRect().width,
+            onResize: (startWidth, deltaX) => {
+                setSidebarWidth(shell, "right", startWidth + deltaX);
+            },
+        });
+    }
+
+    if (leftEditor) {
+        installResizeHandle(leftEditor, {
+            label: "Move editor split",
+            className: "resize-handle-editor",
+            onStart: () => leftEditor.getBoundingClientRect().width,
+            onResize: (startWidth, deltaX) => {
+                setLeftEditorWidth(shell, startWidth + deltaX);
+            },
+        });
+    }
+}
+
+function installResizeHandle(container, {label, className, onStart, onResize}) {
+    if (container.querySelector(":scope > .resize-handle")) {
+        return;
+    }
+
+    const handle = document.createElement("button");
+    handle.type = "button";
+    handle.className = `resize-handle ${className}`;
+    handle.setAttribute("aria-label", label);
+    handle.setAttribute("aria-orientation", "vertical");
+    handle.setAttribute("role", "separator");
+    handle.title = label;
+
+    handle.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) {
+            return;
+        }
+
+        const startX = event.clientX;
+        const startWidth = onStart();
+        handle.setPointerCapture(event.pointerId);
+        handle.dataset.active = "true";
+        document.documentElement.dataset.resizing = "true";
+        event.preventDefault();
+
+        const move = (moveEvent) => {
+            onResize(startWidth, moveEvent.clientX - startX);
+        };
+        const stop = () => {
+            handle.releasePointerCapture(event.pointerId);
+            handle.removeEventListener("pointermove", move);
+            handle.removeEventListener("pointerup", stop);
+            handle.removeEventListener("pointercancel", stop);
+            delete handle.dataset.active;
+            delete document.documentElement.dataset.resizing;
+            persistEditorLayout();
+        };
+
+        handle.addEventListener("pointermove", move);
+        handle.addEventListener("pointerup", stop);
+        handle.addEventListener("pointercancel", stop);
+    });
+
+    handle.addEventListener("keydown", (event) => {
+        const step = event.shiftKey ? 48 : 16;
+        const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+        if (!direction) {
+            return;
+        }
+
+        event.preventDefault();
+        onResize(onStart(), direction * step);
+        persistEditorLayout();
+    });
+
+    container.append(handle);
+}
+
+function setSidebarWidth(shell, side, width) {
+    const property = side === "left" ? "--left-sidebar-width" : "--right-sidebar-width";
+    const otherProperty = side === "left" ? "--right-sidebar-width" : "--left-sidebar-width";
+    const otherSidebarWidth = cssPixelValue(shell, otherProperty, 240);
+    const leftEditorWidth = cssPixelValue(shell, "--left-editor-width", null);
+    const shellWidth = shell.getBoundingClientRect().width;
+    const maxWidth = Math.max(160, shellWidth - otherSidebarWidth - (leftEditorWidth || 320) - 320);
+    const nextWidth = clamp(width, 160, Math.min(440, maxWidth));
+
+    shell.style.setProperty(property, `${nextWidth}px`);
+    constrainLeftEditorWidth(shell);
+}
+
+function setLeftEditorWidth(shell, width) {
+    const shellWidth = shell.getBoundingClientRect().width;
+    const leftSidebarWidth = cssPixelValue(shell, "--left-sidebar-width", 240);
+    const rightSidebarWidth = cssPixelValue(shell, "--right-sidebar-width", 240);
+    const maxWidth = Math.max(320, shellWidth - leftSidebarWidth - rightSidebarWidth - 320);
+    shell.style.setProperty("--left-editor-width", `${clamp(width, 320, maxWidth)}px`);
+}
+
+function constrainLeftEditorWidth(shell) {
+    const leftEditorWidth = cssPixelValue(shell, "--left-editor-width", null);
+    if (leftEditorWidth !== null) {
+        setLeftEditorWidth(shell, leftEditorWidth);
+    }
+}
+
+function constrainEditorLayout(shell) {
+    setSidebarWidth(shell, "left", cssPixelValue(shell, "--left-sidebar-width", 240));
+    setSidebarWidth(shell, "right", cssPixelValue(shell, "--right-sidebar-width", 240));
+    constrainLeftEditorWidth(shell);
+}
+
+function cssPixelValue(element, property, fallback) {
+    const value = getComputedStyle(element).getPropertyValue(property).trim();
+    if (!value.endsWith("px")) {
+        return fallback;
+    }
+
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function applyLayoutValue(shell, property, value) {
+    if (Number.isFinite(value)) {
+        shell.style.setProperty(property, `${value}px`);
+    }
+}
+
+function readEditorLayout() {
+    try {
+        return JSON.parse(localStorage.getItem("palimpsest:editor-layout")) || {};
+    } catch {
+        return {};
+    }
+}
+
+function persistEditorLayout() {
+    const shell = document.querySelector(".app-shell");
+    if (!shell) {
+        return;
+    }
+
+    try {
+        localStorage.setItem("palimpsest:editor-layout", JSON.stringify({
+            leftSidebarWidth: cssPixelValue(shell, "--left-sidebar-width", null),
+            rightSidebarWidth: cssPixelValue(shell, "--right-sidebar-width", null),
+            leftEditorWidth: cssPixelValue(shell, "--left-editor-width", null),
+        }));
+    } catch {
+        // Layout persistence is a convenience; resizing should still work without storage.
+    }
+}
+
+function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+}
 
 async function initializeWorkspaces() {
     renderHealth(await loadHealth());
