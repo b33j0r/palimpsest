@@ -7,6 +7,16 @@ syntax highlighting.
 
 ![Palimpsest workbench screenshot](docs/ui-001.png)
 
+Features:
+
+- Develop grammars against project files and examples.
+- Keep source examples and grammar/parser code visible side by side.
+- Build Rust parser runtimes from the browser with the `cargo-wasm-bindgen`
+  preset.
+- Connect parser/highlighting runtimes through a small JSON token interface,
+  with included Nom and Pest examples.
+- Use fallback highlighting for common source and grammar files.
+
 ## Requirements
 
 To run the workbench itself, install:
