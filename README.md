@@ -1,100 +1,138 @@
 # Palimpsest
 
-Palimpsest is a browser workbench for developing language grammars against real project files. Point it at a project with a `palimpsest.toml`, browse project files side by side, edit either pane, and wire custom parsers/highlighters into the editor loop.
+Palimpsest is a browser workbench for developing language grammars against real
+project files. It opens a project configured with `palimpsest.toml`, shows two
+file browser/editor panes, and can load project-specific parser runtimes for
+syntax highlighting.
 
 ## Run
 
-Install the workbench command in editable mode:
+Install the command from a local checkout:
 
 ```sh
-uv tool install --editable /Users/brian/Projects/palimpsest
+uv tool install --editable .
 ```
 
-Then run it from any project directory that contains a `palimpsest.toml`:
+Then run it from a project that contains `palimpsest.toml`:
 
 ```sh
-cd /Users/brian/Projects/moneyscheme
+cd ../example-language
 palimpsest
 ```
 
 Open `http://127.0.0.1:5000`.
 
-For local development from this repository:
+During Palimpsest development, run the command through `uv` from this
+repository:
 
 ```sh
 uv run palimpsest
+uv run palimpsest ../example-language
+uv run palimpsest --config ../example-language/palimpsest.toml
 ```
 
-To run against another project directory or config file:
+## Project Configuration
 
-```sh
-uv run palimpsest /Users/brian/Projects/moneyscheme
-uv run palimpsest --config /Users/brian/Projects/moneyscheme/palimpsest.toml
-```
-
-## Project Config
-
-A project config declares examples, parser definitions, and filetypes that use those parsers:
+A project config declares example files, parser runtimes, and the filetypes
+that should use those parsers.
 
 ```toml
 examples_dir = "./examples"
 
-[capture_maps.mscm]
-rule = "function"
+[capture_maps.my_language]
+function = "function"
 symbol = "variable"
 string = "string"
 number = "number"
 keyword = "keyword"
 
-[[parsers.mscm]]
+[[parsers.my_language]]
 adapter = "pest"
 grammar_files = ["./crates/parser/src/*.pest"]
-highlight_captures = "mscm"
+highlight_captures = "my_language"
 
-[parsers.mscm.build]
-command = "cargo build -p parser --target wasm32-unknown-unknown && wasm-bindgen --target web --out-dir target/palimpsest/mscm --out-name parser target/wasm32-unknown-unknown/debug/parser.wasm"
-outputs = ["./target/palimpsest/mscm/parser.js", "./target/palimpsest/mscm/parser_bg.wasm"]
+[parsers.my_language.build]
+command = "cargo build -p parser --target wasm32-unknown-unknown && wasm-bindgen --target web --out-dir target/palimpsest/my-language --out-name parser target/wasm32-unknown-unknown/debug/parser.wasm"
+outputs = [
+  "./target/palimpsest/my-language/parser.js",
+  "./target/palimpsest/my-language/parser_bg.wasm",
+]
 
-[parsers.mscm.runtime]
-module = "./target/palimpsest/mscm/parser.js"
+[parsers.my_language.runtime]
+module = "./target/palimpsest/my-language/parser.js"
 parse_export = "parse_to_json"
 
-[[filetypes.mscm]]
-extensions = ["*.mscm"]
-parser = "mscm"
+[[filetypes.my_language]]
+extensions = ["*.my"]
+parser = "my_language"
 ```
 
-`grammar_files` accepts files, directories, and glob patterns, including recursive patterns like `./crates/parser/**/*.pest`. Top-level `grammar_files` is still accepted for older configs. During the transition, a `[[filetypes.name]]` table may also contain `grammar_files`; in that case the filetype name is treated as the parser id.
+`grammar_files` accepts files, directories, and glob patterns, including
+recursive patterns such as `./crates/parser/**/*.pest`. Grammar files show build
+controls when their parser has a configured build command.
 
-`runtime.module` points at the browser-loadable JavaScript module produced by `wasm-bindgen --target web`. The module should export a parser function named by `parse_export`; Palimpsest calls it with source text and expects a JSON string shaped like `{ "ok": true, "tokens": [...] }` or `{ "ok": false, "error": "..." }`. The companion Rust crate at `crates/palimpsest` provides this reusable token schema and Pest span helpers so language projects can depend on Palimpsest instead of copying a private protocol.
+`runtime.module` points at the browser-loadable JavaScript module produced by
+`wasm-bindgen --target web`. The module should export the parser function named
+by `parse_export`. Palimpsest calls that function with source text and expects a
+JSON string:
 
-`capture_maps` define reusable mappings from parser output captures to standard editor token classes. `highlight_captures` may be either an inline map or the name of a map from `[capture_maps.NAME]`. Filetypes inherit their parser's resolved captures by default, so they only need `highlight_captures` when they need filetype-specific overrides. Simple parsers can emit broad captures such as `string`, `keyword`, `number`, and `operator`. Richer parser runtimes may emit language-specific captures such as `handler`, `capture.variable`, or `predicate.operator`, then map those names onto Palimpsest's semantic palette. Useful targets include `comment`, `string`, `keyword`, `number`, `function`, `method`, `handler`, `parameter`, `label`, `namespace`, `type`, `constructor`, `variable`, `property`, `attribute`, `constant`, `operator`, `predicate`, `capture`, `punctuation`, `delimiter`, `bracket`, and `tag`. Dotted captures follow Tree-sitter-style naming by becoming dash-separated token classes, for example `punctuation.delimiter` maps to `tok-punctuation-delimiter`.
+```json
+{ "ok": true, "tokens": [] }
+```
 
-## Workbench
+or:
 
-The UI is a fixed four-column workbench with two file browser/editor pairs.
+```json
+{ "ok": false, "error": "parse failed" }
+```
 
-The left browser initially opens the configured examples directory. The right browser initially opens near the first configured grammar file and opens that file when available. After startup, both panes use the same file browsing, editing, mode detection, and highlighting behavior for any project file.
+The Rust crate in `crates/palimpsest` provides the shared token schema and Pest
+span helpers for parser runtimes.
 
-## Modes And Highlighting
+## Highlighting
 
-Editors resolve a major mode when a file opens. Major modes own behavior: toolbars, compiler hooks, and runtime dependencies. Syntax coloring is separate: most files use the generic major mode plus the fallback highlighter registry.
+Parser runtimes emit logical captures such as `keyword`, `string`,
+`function`, or `capture.variable`. `capture_maps` translate those captures to
+Palimpsest token classes. Dotted capture names become dash-separated CSS
+classes; for example, `punctuation.delimiter` becomes
+`tok-punctuation-delimiter`.
 
-That fallback registry is extensible and config-aware. It uses Highlight.js from a pinned CDN release for common source formats such as Rust, C, Python, Scheme, INI/TOML-style config, JavaScript/TypeScript, and CSS, with lightweight local tokenizers retained for grammar formats such as Pest, Lezer, Tree-sitter grammar files, plain text, and CDN failure fallback. Configured filetypes such as `*.mscm` are also registered, so project-defined languages participate in the same mode/highlighter pipeline instead of being hardcoded into the app.
+Configured filetypes inherit their parser's resolved capture map by default.
+Use filetype-level capture maps only when a filetype needs different styling
+from its parser.
 
-Configured parser runtimes are parser-scoped, such as `parser:mscm`. On startup, Palimpsest attempts to import each configured runtime module that already exists, so source files can enter project-format mode without a manual compile. If an artifact is missing or stale, the runtime stays unavailable and configured filetypes continue using their fallback highlighter.
+Files without a loaded parser runtime use the fallback highlighter registry.
+That registry covers common source formats through Highlight.js and keeps local
+tokenizers for grammar-oriented formats such as Pest, Lezer, Tree-sitter
+grammar files, and plain text.
 
-Files declared in a parser's `grammar_files` show parser build controls when that parser has a configured build command, regardless of their major mode. The build action calls the configured server-side command, serves the configured wasm-bindgen runtime module from the project directory, imports it in the browser through the parser-runtime loader, and updates the parser-scoped runtime. Source files with configured filetypes switch into project-format mode when their parser runtime is ready, so highlighting comes from the loaded wasm parser rather than from a fallback tokenizer.
+## Workbench Behavior
 
-## Code Shape
+The UI has two file browser/editor pairs. The left browser starts at
+`examples_dir`. The right browser starts near the first configured grammar file
+and opens that file when available.
+
+Both panes share the same browsing, editing, mode detection, and highlighting
+behavior. Files with configured filetypes switch from fallback highlighting to
+parser-runtime highlighting once their parser module is available.
+
+At startup, Palimpsest imports configured runtime modules that already exist. If
+a runtime has not been built yet, the filetype remains usable with fallback
+highlighting until the parser build succeeds.
+
+## Code Layout
 
 - `palimpsest/config.py` loads and validates `palimpsest.toml`.
 - `palimpsest/models.py` defines typed API response models.
-- `palimpsest/api.py` serves app state, directory listings, grammar discovery, and file content.
+- `palimpsest/api.py` serves app state, directory listings, grammar discovery,
+  and file content.
 - `palimpsest/ui.py` serves the HTML shell.
 - `palimpsest/static/js/app.mjs` bootstraps the browser workbench.
 - `palimpsest/static/js/core/` contains signal and registry primitives.
-- `palimpsest/static/js/highlight/` contains Highlight.js integration and local fallback tokenizers.
+- `palimpsest/static/js/highlight/` contains Highlight.js integration and local
+  fallback tokenizers.
 - `palimpsest/static/js/modes/` contains major-mode and compiler wiring.
-- `palimpsest/static/js/parser_runtimes.mjs` contains configured parser runtime registration and loading.
-- `palimpsest/static/js/workspace.mjs` contains the reusable browser/editor custom element.
+- `palimpsest/static/js/parser_runtimes.mjs` registers and loads configured
+  parser runtimes.
+- `palimpsest/static/js/workspace.mjs` defines the reusable browser/editor
+  custom element.
