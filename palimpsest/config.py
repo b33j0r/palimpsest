@@ -8,14 +8,16 @@ import pydantic
 
 class ParserBuildConfig(pydantic.BaseModel):
     command: str | list[str] | None = None
-    preset: Literal["cargo-wasm-bindgen"] | None = None
+    preset: Literal["cargo-wasm-bindgen", "lezer"] | None = None
     package: str | None = None
     target: str = "wasm32-unknown-unknown"
     profile: str = "debug"
     release: bool = False
+    grammar: Path | None = None
     wasm: Path | None = None
     out_dir: Path | None = None
     out_name: str = "parser"
+    export_name: str = "parser"
     cwd: Path | None = None
     outputs: list[Path] = pydantic.Field(default_factory=list)
 
@@ -24,30 +26,60 @@ class ParserBuildConfig(pydantic.BaseModel):
         return self.command is not None or self.preset is not None
 
     def preset_commands(self) -> list[list[str]]:
-        if self.preset != "cargo-wasm-bindgen":
-            return []
-        if not self.package:
-            raise ValueError("cargo-wasm-bindgen build preset requires package")
-        if self.wasm is None:
-            raise ValueError("cargo-wasm-bindgen build preset requires wasm")
-        if self.out_dir is None:
-            raise ValueError("cargo-wasm-bindgen build preset requires out_dir")
+        if self.preset == "cargo-wasm-bindgen":
+            if not self.package:
+                raise ValueError("cargo-wasm-bindgen build preset requires package")
+            if self.wasm is None:
+                raise ValueError("cargo-wasm-bindgen build preset requires wasm")
+            if self.out_dir is None:
+                raise ValueError("cargo-wasm-bindgen build preset requires out_dir")
 
-        cargo = ["cargo", "build", "-p", self.package, "--target", self.target]
-        if self.release:
-            cargo.append("--release")
+            cargo = ["cargo", "build", "-p", self.package, "--target", self.target]
+            if self.release:
+                cargo.append("--release")
 
-        bindgen = [
-            "wasm-bindgen",
-            "--target",
-            "web",
-            "--out-dir",
-            self.out_dir.as_posix(),
-            "--out-name",
-            self.out_name,
-            self.wasm.as_posix(),
-        ]
-        return [cargo, bindgen]
+            bindgen = [
+                "wasm-bindgen",
+                "--target",
+                "web",
+                "--out-dir",
+                self.out_dir.as_posix(),
+                "--out-name",
+                self.out_name,
+                self.wasm.as_posix(),
+            ]
+            return [cargo, bindgen]
+
+        if self.preset == "lezer":
+            if self.grammar is None:
+                raise ValueError("lezer build preset requires grammar file")
+            if self.out_dir is None:
+                raise ValueError("lezer build preset requires out_dir")
+
+            generated = self.out_dir / f"{self.out_name}.generated.js"
+            module = self.out_dir / f"{self.out_name}.js"
+            return [
+                ["mkdir", "-p", self.out_dir.as_posix()],
+                [
+                    "npx",
+                    "lezer-generator",
+                    "--output",
+                    generated.as_posix(),
+                    "--export",
+                    self.export_name,
+                    self.grammar.as_posix(),
+                ],
+                [
+                    "npx",
+                    "esbuild",
+                    generated.as_posix(),
+                    "--bundle",
+                    "--format=esm",
+                    f"--outfile={module.as_posix()}",
+                ],
+            ]
+
+        return []
 
     def display_command(self) -> str | list[str] | None:
         if self.command is not None:
@@ -126,6 +158,8 @@ class ProjectConfig(pydantic.BaseModel):
         for parser in self.parsers:
             if parser.build.preset == "cargo-wasm-bindgen":
                 _resolve_cargo_wasm_bindgen_build(parser)
+            elif parser.build.preset == "lezer":
+                _resolve_lezer_build(parser)
         return self
 
     def _resolve_capture_reference(
@@ -274,3 +308,28 @@ def _resolve_cargo_wasm_bindgen_build(parser: ParserConfig):
 
     if parser.runtime.module is None:
         parser.runtime.module = generated_outputs[0]
+
+
+def _resolve_lezer_build(parser: ParserConfig):
+    build = parser.build
+    if not parser.grammar_files:
+        raise ValueError(f"Parser {parser.id!r} uses lezer build preset without grammar_files")
+
+    if build.grammar is None:
+        build.grammar = parser.grammar_files[0]
+    if build.out_dir is None:
+        build.out_dir = Path("target") / "palimpsest" / parser.id
+
+    generated_outputs = [
+        build.out_dir / f"{build.out_name}.generated.js",
+        build.out_dir / f"{build.out_name}.generated.terms.js",
+        build.out_dir / f"{build.out_name}.js",
+    ]
+    for output in generated_outputs:
+        if output not in build.outputs:
+            build.outputs.append(output)
+
+    if parser.runtime.module is None:
+        parser.runtime.module = generated_outputs[-1]
+    if parser.runtime.parse_export == "parse_to_json":
+        parser.runtime.parse_export = build.export_name

@@ -13,8 +13,9 @@ Features:
 - Keep source examples and grammar/parser code visible side by side.
 - Build Rust parser runtimes from the browser with the `cargo-wasm-bindgen`
   preset.
+- Build Lezer parser runtimes from the browser with the `lezer` preset.
 - Connect parser/highlighting runtimes through a small JSON token interface,
-  with included Nom and Pest examples.
+  with included Nom, Pest, and Lezer examples.
 - Use fallback highlighting for common source and grammar files.
 
 ## Requirements
@@ -36,6 +37,13 @@ One-time setup for the Rust/WASM tools:
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli
+```
+
+The Lezer example uses JavaScript parser tooling. To build it from the
+Palimpsest UI, install Node.js and install the repository's npm dependencies:
+
+```sh
+npm install
 ```
 
 Palimpsest still opens files before those parser runtimes are built. Until a
@@ -89,16 +97,20 @@ Sample files:
 
 - `examples/observatory.clike`, `examples/garden.clike`, and
   `examples/vault.clike` use the C-like demo language.
+- `examples/observatory.lclike`, `examples/garden.lclike`, and
+  `examples/vault.lclike` use the same C-like demo language through Lezer.
 - `examples/observatory.talkie`, `examples/garden.talkie`, and
   `examples/vault.talkie` use Talkie, a Smalltalk-inspired demo language.
 
 Parser runtimes:
 
 - `examples/clike-nom/` implements the `.clike` runtime with Nom.
+- `examples/clike-lezer/` implements the `.lclike` runtime with Lezer.
 - `examples/talkie-pest/` implements the `.talkie` runtime with Pest.
 
-The root `palimpsest.toml` maps `*.clike` to `clike_nom` and `*.talkie` to
-`talkie_pest`, so each parser can be seen independently in the workbench.
+The root `palimpsest.toml` maps `*.clike` to `clike_nom`, `*.lclike` to
+`clike_lezer`, and `*.talkie` to `talkie_pest`, so each parser can be seen
+independently in the workbench.
 
 ## Project Configuration
 
@@ -169,6 +181,26 @@ or:
 
 The Rust crate in `crates/palimpsest` provides the shared token schema, Pest span
 helpers, and byte-range token helpers for parser runtimes.
+
+For Lezer grammars, use the `lezer` preset:
+
+```toml
+[[parsers.my_lezer_language]]
+adapter = "lezer"
+grammar_files = ["./src/my-language.grammar"]
+highlight_captures = "my_language"
+
+[parsers.my_lezer_language.build]
+preset = "lezer"
+
+[parsers.my_lezer_language.runtime]
+parse_export = "parser"
+```
+
+The preset runs `lezer-generator`, bundles the generated parser with `esbuild`,
+and derives `runtime.module` as `target/palimpsest/<parser>/parser.js`. The
+runtime export should be the Lezer parser object; Palimpsest walks its syntax
+tree and emits tokens for node names present in the configured capture map.
 
 ## Highlighting
 

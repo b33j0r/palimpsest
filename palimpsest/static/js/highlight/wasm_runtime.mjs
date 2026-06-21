@@ -42,7 +42,7 @@ export function highlightWithRuntime(source, parse, captureMap = {}) {
   return highlightTokenSpans(source, parsed.tokens, captureMap);
 }
 
-function highlightTokenSpans(source, tokens, captureMap) {
+export function highlightTokenSpans(source, tokens, captureMap) {
   let html = "";
   let cursor = 0;
   const spans = tokens
@@ -87,7 +87,7 @@ function tokenClass(capture) {
     .replace(/^-|-$/g, "");
 }
 
-function escapeHtml(value) {
+export function escapeHtml(value) {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")

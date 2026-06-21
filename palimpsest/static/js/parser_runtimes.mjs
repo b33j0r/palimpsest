@@ -1,4 +1,5 @@
 import { loadWasmParserRuntime } from "./highlight/wasm_runtime.mjs";
+import { loadLezerParserRuntime } from "./highlight/lezer_runtime.mjs";
 
 export function registerConfiguredParserRuntimes({ appState, runtimes }) {
   for (const parser of parserRuntimeConfigs(appState)) {
@@ -6,7 +7,7 @@ export function registerConfiguredParserRuntimes({ appState, runtimes }) {
       id: runtimeIdForParser(parser.id),
       version: 0,
       parserId: parser.id,
-      label: `${parser.id} wasm runtime`,
+      label: `${parser.id} parser runtime`,
       ready: false,
     });
   }
@@ -36,9 +37,9 @@ export async function loadConfiguredParserRuntime({ appState, graph, parserId, r
     return null;
   }
 
-  let wasmRuntime;
+  let runtime;
   try {
-    wasmRuntime = await loadWasmParserRuntime({
+    runtime = await loadParserRuntime({
       parser,
       captureMap: captureMapForParser(appState, parserId),
     });
@@ -50,10 +51,10 @@ export async function loadConfiguredParserRuntime({ appState, graph, parserId, r
   return runtimes.update(runtimeId, {
     parserId,
     grammarPath,
-    label: `${parserId} wasm runtime`,
-    highlight: wasmRuntime.highlight,
-    captureMap: wasmRuntime.captureMap,
-    parse: wasmRuntime.parse,
+    label: `${parserId} parser runtime`,
+    highlight: runtime.highlight,
+    captureMap: runtime.captureMap,
+    parse: runtime.parse,
     ready: true,
   });
 }
@@ -81,4 +82,11 @@ export function captureMapForParser(appState, parserId) {
 
 function parserRuntimeConfigs(appState) {
   return (appState.parsers || []).filter((parser) => parser.runtime?.module);
+}
+
+function loadParserRuntime({ parser, captureMap }) {
+  if (parser.adapter === "lezer") {
+    return loadLezerParserRuntime({ parser, captureMap });
+  }
+  return loadWasmParserRuntime({ parser, captureMap });
 }

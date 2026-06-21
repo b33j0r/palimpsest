@@ -1,0 +1,10 @@
+{
+  "name": "palimpsest",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@lezer/generator": "1.8.0",
+    "@lezer/lr": "1.4.0",
+    "esbuild": "0.27.2"
+  }
+}

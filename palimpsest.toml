@@ -11,6 +11,22 @@ comment = "comment"
 operator = "operator"
 punctuation = "punctuation"
 
+[capture_maps.clike_lezer]
+fn = "keyword"
+let = "keyword"
+return = "keyword"
+if = "keyword"
+else = "keyword"
+while = "keyword"
+Type = "type"
+FunctionName = "function"
+Callee = "function"
+VariableName = "variable"
+Identifier = "variable"
+Number = "number"
+String = "string"
+LineComment = "comment"
+
 [capture_maps.talkie]
 class = "type"
 selector = "function"
@@ -45,6 +61,17 @@ package = "clike-nom"
 [parsers.clike_nom.runtime]
 parse_export = "parse_to_json"
 
+[[parsers.clike_lezer]]
+adapter = "lezer"
+grammar_files = ["./examples/clike-lezer/src/clike.grammar"]
+highlight_captures = "clike_lezer"
+
+[parsers.clike_lezer.build]
+preset = "lezer"
+
+[parsers.clike_lezer.runtime]
+parse_export = "parser"
+
 [[filetypes.clike]]
 extensions = ["*.clike"]
 parser = "clike_nom"
@@ -54,3 +81,8 @@ highlight_captures = "clike"
 extensions = ["*.talkie"]
 parser = "talkie_pest"
 highlight_captures = "talkie"
+
+[[filetypes.lclike]]
+extensions = ["*.lclike"]
+parser = "clike_lezer"
+highlight_captures = "clike_lezer"
