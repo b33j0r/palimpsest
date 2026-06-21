@@ -311,7 +311,7 @@ palimpsest-editor-workspace {
 .group-sidebar {
   position: relative;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   background: var(--panel);
 }
 
@@ -392,16 +392,6 @@ html[data-resizing="true"],
 html[data-resizing="true"] * {
   cursor: col-resize !important;
   user-select: none;
-}
-
-.pane-label {
-  min-height: 30px;
-  padding: 7px 16px;
-  border-bottom: 1px solid var(--line);
-  color: var(--text);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0;
 }
 
 .editor-pane:last-child {

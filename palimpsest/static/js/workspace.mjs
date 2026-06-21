@@ -222,8 +222,6 @@ export function createEditorWorkspaceClass(dependencies) {
       ];
 
       const sourceTitle = this.querySelector("[data-source-title]");
-      const browserLabel = this.querySelector("[data-browser-label]");
-      const editorPaneLabel = this.querySelector("[data-editor-pane-label]");
       const sidebar = this.querySelector(".group-sidebar");
       const editorPane = this.querySelector(".editor-pane");
       this.saveButton = this.createSaveButton();
@@ -235,8 +233,6 @@ export function createEditorWorkspaceClass(dependencies) {
       const textarea = this.querySelector("[data-editor]");
 
       sourceTitle.id = `${this.dataset.workspace}-source-title`;
-      browserLabel.textContent = this.dataset.browserLabel || "Files";
-      editorPaneLabel.textContent = this.dataset.paneLabel || "Editor";
       sidebar.dataset.region = this.dataset.workspace;
       sidebar.setAttribute("aria-label", `${this.dataset.workspace} files`);
       editorPane.dataset.region = this.dataset.workspace;

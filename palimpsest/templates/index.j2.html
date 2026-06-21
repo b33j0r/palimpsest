@@ -10,13 +10,11 @@
 <script type="application/json" id="app-state">{{ state | tojson }}</script>
 <template id="editor-workspace-template">
     <aside class="group-sidebar">
-        <p class="pane-label" data-browser-label></p>
         <div class="path-bar" data-path></div>
         <div class="file-list" data-file-list role="list"></div>
     </aside>
 
     <section class="editor-pane">
-        <p class="pane-label" data-editor-pane-label></p>
         <p class="source-title" data-source-title></p>
         <div class="mode-toolbar" data-mode-toolbar hidden></div>
         <details class="build-result" data-build-result hidden>
@@ -51,8 +49,6 @@
     <main class="app-shell" aria-label="File editors">
         <palimpsest-editor-workspace
                 data-workspace="left"
-                data-browser-label="Examples"
-                data-pane-label="Source"
                 data-empty-title="No file selected"
                 data-editor-label="Source"
                 data-start-path="{{ state.examples_dir }}"
@@ -60,8 +56,6 @@
 
         <palimpsest-editor-workspace
                 data-workspace="right"
-                data-browser-label="Grammar"
-                data-pane-label="Parser"
                 data-empty-title="No file selected"
                 data-editor-label="Grammar or parser source"
         ></palimpsest-editor-workspace>
