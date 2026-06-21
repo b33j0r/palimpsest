@@ -1,4 +1,10 @@
-# Development (External Project `moneyscheme` is the test project)
+# Principles
+
+- Must be modular, decoupled, and extensible.
+- Must be data-driven.
+- Split large things into smaller, manageable components.
+
+# External Project (`moneyscheme` is the test project)
 
 For development, we're hardcoding against:
 
