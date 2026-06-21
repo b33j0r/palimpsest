@@ -1,0 +1,8 @@
+Object subclass: GardenBed [
+  water: zone whenSoil: soil [
+    | thirst |
+    thirst := 10 - soil.
+    thirst > 3 ifTrue: [ Sprinkler mist: zone. ^thirst ].
+    ^1
+  ]
+]

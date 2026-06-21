@@ -1,0 +1,8 @@
+fn open_vault(badge: text, hour: int) -> bool {
+  let trusted: bool = check_badge(badge);
+  if (trusted && hour < 22) {
+    log("vault opened");
+    return true;
+  }
+  return false;
+}

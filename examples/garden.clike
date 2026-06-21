@@ -1,0 +1,8 @@
+fn water_plan(zone: int, soil: int) -> int {
+  let thirst: int = 10 - soil;
+  while (thirst > 3) {
+    pulse(zone, "mist");
+    return thirst;
+  }
+  return 1;
+}

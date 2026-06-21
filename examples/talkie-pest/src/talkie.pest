@@ -1,0 +1,36 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" | comment }
+comment = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+
+program = { SOI ~ class_def* ~ EOI }
+
+class_def = { class_name ~ selector_part ~ class_name ~ "[" ~ method* ~ "]" }
+method = { method_selector ~ block }
+method_selector = { keyword_method | unary_selector }
+keyword_method = { selector_part ~ variable ~ (selector_part ~ variable)* }
+
+block = { "[" ~ locals? ~ statement* ~ return_stmt? ~ "]" }
+locals = { "|" ~ variable* ~ "|" }
+statement = { assignment | expr_stmt }
+assignment = { variable ~ assignment_operator ~ message_expr ~ "." }
+expr_stmt = { message_expr ~ "." }
+return_stmt = { return_operator ~ message_expr ~ "."? }
+
+message_expr = { primary ~ message_send* }
+message_send = { keyword_send | binary_send | unary_send }
+keyword_send = { selector_part ~ primary ~ (selector_part ~ primary)* }
+binary_send = { binary_operator ~ primary }
+
+primary = _{ string | number | block | class_name | variable | "(" ~ message_expr ~ ")" }
+
+selector_part = @{ identifier ~ ":" }
+unary_selector = @{ identifier }
+unary_send = @{ identifier }
+assignment_operator = { ":=" }
+return_operator = { "^" }
+binary_operator = { "==" | "~=" | ">=" | "<=" | "+" | "-" | "*" | "/" | ">" | "<" }
+
+class_name = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_")* }
+variable = @{ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
+identifier = { (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+string = @{ "'" ~ ( "''" | !"'" ~ ANY )* ~ "'" }

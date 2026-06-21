@@ -1,0 +1,56 @@
+examples_dir = "./examples"
+
+[capture_maps.clike]
+keyword = "keyword"
+type = "type"
+function = "function"
+variable = "variable"
+number = "number"
+string = "string"
+comment = "comment"
+operator = "operator"
+punctuation = "punctuation"
+
+[capture_maps.talkie]
+class = "type"
+selector = "function"
+variable = "variable"
+number = "number"
+string = "string"
+comment = "comment"
+operator = "operator"
+punctuation = "punctuation"
+
+[[parsers.talkie_pest]]
+adapter = "pest"
+grammar_files = ["./examples/talkie-pest/src/talkie.pest"]
+highlight_captures = "talkie"
+
+[parsers.talkie_pest.build]
+preset = "cargo-wasm-bindgen"
+package = "talkie-pest"
+
+[parsers.talkie_pest.runtime]
+parse_export = "parse_to_json"
+
+[[parsers.clike_nom]]
+adapter = "nom"
+grammar_files = ["./examples/clike-nom/src/lib.rs"]
+highlight_captures = "clike"
+
+[parsers.clike_nom.build]
+preset = "cargo-wasm-bindgen"
+package = "clike-nom"
+
+[parsers.clike_nom.runtime]
+parse_export = "parse_to_json"
+
+[[filetypes.clike]]
+extensions = ["*.clike"]
+parser = "clike_nom"
+highlight_captures = "clike"
+
+[[filetypes.talkie]]
+extensions = ["*.talkie"]
+parser = "talkie_pest"
+highlight_captures = "talkie"

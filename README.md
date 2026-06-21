@@ -13,23 +13,52 @@ Install the command from a local checkout:
 uv tool install --editable .
 ```
 
-Then run it from a project that contains `palimpsest.toml`:
+Then run the included demo from this repository:
+
+```sh
+uv run palimpsest
+```
+
+Open `http://127.0.0.1:5000`.
+
+The repository root contains `palimpsest.toml`, so running Palimpsest here opens
+the canonical example workspace in `./examples`.
+
+You can also run an external project that contains `palimpsest.toml`:
 
 ```sh
 cd ../example-language
 palimpsest
 ```
 
-Open `http://127.0.0.1:5000`.
-
-During Palimpsest development, run the command through `uv` from this
-repository:
+During Palimpsest development, useful command forms are:
 
 ```sh
 uv run palimpsest
 uv run palimpsest ../example-language
 uv run palimpsest --config ../example-language/palimpsest.toml
 ```
+
+## Examples
+
+The in-repo examples are the canonical demo and smoke-test workspace. They keep
+runtime configuration, parser code, and sample source files under `./examples`
+so the app can browse the same tree it serves as examples.
+
+Sample files:
+
+- `examples/observatory.clike`, `examples/garden.clike`, and
+  `examples/vault.clike` use the C-like demo language.
+- `examples/observatory.talkie`, `examples/garden.talkie`, and
+  `examples/vault.talkie` use Talkie, a Smalltalk-inspired demo language.
+
+Parser runtimes:
+
+- `examples/clike-nom/` implements the `.clike` runtime with Nom.
+- `examples/talkie-pest/` implements the `.talkie` runtime with Pest.
+
+The root `palimpsest.toml` maps `*.clike` to `clike_nom` and `*.talkie` to
+`talkie_pest`, so each parser can be seen independently in the workbench.
 
 ## Project Configuration
 
@@ -92,8 +121,8 @@ or:
 { "ok": false, "error": "parse failed" }
 ```
 
-The Rust crate in `crates/palimpsest` provides the shared token schema and Pest
-span helpers for parser runtimes.
+The Rust crate in `crates/palimpsest` provides the shared token schema, Pest span
+helpers, and byte-range token helpers for parser runtimes.
 
 ## Highlighting
 
@@ -142,3 +171,4 @@ highlighting until the parser build succeeds.
   parser runtimes.
 - `palimpsest/static/js/workspace.mjs` defines the reusable browser/editor
   custom element.
+- `examples/` contains the canonical demo files and example parser runtimes.

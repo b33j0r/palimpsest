@@ -1,0 +1,8 @@
+Object subclass: VaultDoor [
+  openFor: badge atHour: hour [
+    | trusted |
+    trusted := badge verify.
+    trusted ifTrue: [ Audit log: 'vault opened'. ^hour < 22 ].
+    ^false
+  ]
+]

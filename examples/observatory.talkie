@@ -1,0 +1,8 @@
+Object subclass: Observatory [
+  watch: sensor threshold: limit [
+    | flare |
+    flare := sensor sample - limit.
+    flare > 7 ifTrue: [ Transcript show: 'aurora alert'. ^flare ].
+    ^0
+  ]
+]

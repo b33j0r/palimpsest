@@ -6,9 +6,14 @@
 
 # Adapted Projects
 
-Palimpsest is developed against a small set of language/project workspaces.
-Treat these as integration targets, not as code that belongs inside the
-Palimpsest repository.
+The canonical Palimpsest examples live in this repository under `./examples`.
+Treat the root `palimpsest.toml`, the `.clike` and `.talkie` files, and the
+example parser crates in `examples/clike-nom/` and `examples/talkie-pest/` as
+the primary demo and smoke-test targets.
+
+Palimpsest is also developed against a small set of language/project workspaces.
+These may be mentioned in issues or tasks. Treat them as integration targets,
+not as code that belongs inside the Palimpsest repository.
 
 The examples below assume these repositories are checked out as siblings of
 `palimpsest`. If your workspace uses a different layout, use the corresponding

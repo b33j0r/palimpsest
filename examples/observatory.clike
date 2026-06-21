@@ -1,0 +1,8 @@
+fn watch_sky(sensor: signal, threshold: int) -> int {
+  let flare: int = sample(sensor) - threshold;
+  if (flare > 7) {
+    emit("aurora alert");
+    return flare;
+  }
+  return 0;
+}
