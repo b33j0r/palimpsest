@@ -62,14 +62,13 @@ parse_export = "parse_to_json"
 [[filetypes.mscm]]
 extensions = ["*.mscm"]
 parser = "mscm"
-highlight_captures = { symbol = "variable", keyword = "keyword" }
 ```
 
 `grammar_files` accepts files, directories, and glob patterns, including recursive patterns like `./crates/parser/**/*.pest`. Top-level `grammar_files` is still accepted for older configs. During the transition, a `[[filetypes.name]]` table may also contain `grammar_files`; in that case the filetype name is treated as the parser id.
 
 `runtime.module` points at the browser-loadable JavaScript module produced by `wasm-bindgen --target web`. The module should export a parser function named by `parse_export`; Palimpsest calls it with source text and expects a JSON string shaped like `{ "ok": true, "tokens": [...] }` or `{ "ok": false, "error": "..." }`. The companion Rust crate at `crates/palimpsest` provides this reusable token schema and Pest span helpers so language projects can depend on Palimpsest instead of copying a private protocol.
 
-`highlight_captures` maps parser output captures to standard editor token classes. Simple parsers can emit broad captures such as `string`, `keyword`, `number`, and `operator`. Richer parser runtimes may emit language-specific captures such as `handler`, `capture.variable`, or `predicate.operator`, then map those names onto Palimpsest's semantic palette. Useful targets include `comment`, `string`, `keyword`, `number`, `function`, `method`, `handler`, `parameter`, `label`, `namespace`, `type`, `constructor`, `variable`, `property`, `attribute`, `constant`, `operator`, `predicate`, `capture`, `punctuation`, `delimiter`, `bracket`, and `tag`. Dotted captures follow Tree-sitter-style naming by becoming dash-separated token classes, for example `punctuation.delimiter` maps to `tok-punctuation-delimiter`.
+`capture_maps` define reusable mappings from parser output captures to standard editor token classes. `highlight_captures` may be either an inline map or the name of a map from `[capture_maps.NAME]`. Filetypes inherit their parser's resolved captures by default, so they only need `highlight_captures` when they need filetype-specific overrides. Simple parsers can emit broad captures such as `string`, `keyword`, `number`, and `operator`. Richer parser runtimes may emit language-specific captures such as `handler`, `capture.variable`, or `predicate.operator`, then map those names onto Palimpsest's semantic palette. Useful targets include `comment`, `string`, `keyword`, `number`, `function`, `method`, `handler`, `parameter`, `label`, `namespace`, `type`, `constructor`, `variable`, `property`, `attribute`, `constant`, `operator`, `predicate`, `capture`, `punctuation`, `delimiter`, `bracket`, and `tag`. Dotted captures follow Tree-sitter-style naming by becoming dash-separated token classes, for example `punctuation.delimiter` maps to `tok-punctuation-delimiter`.
 
 ## Workbench
 
@@ -81,7 +80,7 @@ The left browser initially opens the configured examples directory. The right br
 
 Editors resolve a major mode when a file opens. Major modes own behavior: toolbars, compiler hooks, and runtime dependencies. Syntax coloring is separate: most files use the generic major mode plus the fallback highlighter registry.
 
-That fallback registry is extensible and config-aware. It includes lightweight built-in tokenizers for common formats such as Rust, C, Python, Scheme, INI/TOML-style config, JavaScript/TypeScript, CSS, Pest, Lezer, Tree-sitter grammar files, and plain text. Configured filetypes such as `*.mscm` are also registered, so project-defined languages participate in the same mode/highlighter pipeline instead of being hardcoded into the app.
+That fallback registry is extensible and config-aware. It uses Highlight.js from a pinned CDN release for common source formats such as Rust, C, Python, Scheme, INI/TOML-style config, JavaScript/TypeScript, and CSS, with lightweight local tokenizers retained for grammar formats such as Pest, Lezer, Tree-sitter grammar files, plain text, and CDN failure fallback. Configured filetypes such as `*.mscm` are also registered, so project-defined languages participate in the same mode/highlighter pipeline instead of being hardcoded into the app.
 
 Configured parser runtimes are parser-scoped, such as `parser:mscm`. On startup, Palimpsest attempts to import each configured runtime module that already exists, so source files can enter project-format mode without a manual compile. If an artifact is missing or stale, the runtime stays unavailable and configured filetypes continue using their fallback highlighter.
 
@@ -95,7 +94,7 @@ Files declared in a parser's `grammar_files` show parser build controls when tha
 - `palimpsest/ui.py` serves the HTML shell.
 - `palimpsest/static/js/app.mjs` bootstraps the browser workbench.
 - `palimpsest/static/js/core/` contains signal and registry primitives.
-- `palimpsest/static/js/highlight/` contains fallback tokenizers.
+- `palimpsest/static/js/highlight/` contains Highlight.js integration and local fallback tokenizers.
 - `palimpsest/static/js/modes/` contains major-mode and compiler wiring.
 - `palimpsest/static/js/parser_runtimes.mjs` contains configured parser runtime registration and loading.
 - `palimpsest/static/js/workspace.mjs` contains the reusable browser/editor custom element.

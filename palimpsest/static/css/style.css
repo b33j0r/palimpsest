@@ -318,10 +318,20 @@ palimpsest-editor-workspace {
   color: #77808e;
 }
 
+.hljs-comment {
+  color: #77808e;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-symbol,
 .tok-string {
   color: #d99f7e;
 }
 
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
 .tok-rule,
 .tok-function,
 .tok-method,
@@ -331,6 +341,11 @@ palimpsest-editor-workspace {
   font-weight: 650;
 }
 
+.hljs-keyword,
+.hljs-built_in,
+.hljs-meta,
+.hljs-operator,
+.hljs-punctuation,
 .tok-keyword,
 .tok-operator,
 .tok-predicate,
@@ -343,12 +358,16 @@ palimpsest-editor-workspace {
   color: #c5a7e8;
 }
 
+.hljs-number,
+.hljs-literal,
 .tok-number,
 .tok-constant,
 .tok-constant-builtin {
   color: #b6c783;
 }
 
+.hljs-type,
+.hljs-class,
 .tok-type,
 .tok-type-builtin,
 .tok-constructor,
@@ -356,6 +375,10 @@ palimpsest-editor-workspace {
   color: #e6bf73;
 }
 
+.hljs-variable,
+.hljs-params,
+.hljs-property,
+.hljs-attr,
 .tok-variable,
 .tok-variable-builtin,
 .tok-parameter,
@@ -368,6 +391,8 @@ palimpsest-editor-workspace {
   color: var(--code-text);
 }
 
+.hljs-tag,
+.hljs-name,
 .tok-tag {
   color: var(--accent-strong);
 }
