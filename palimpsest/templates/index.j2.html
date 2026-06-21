@@ -37,55 +37,26 @@
         <p class="editor-status" data-status role="status"></p>
     </section>
 </template>
-<main class="app-shell" aria-label="Grammar and example editors">
-    <aside class="config-pane" aria-labelledby="config-title">
-        <header class="config-header">
-            <div class="brand">
-                <span class="brand-mark">P</span>
-                <h1 id="config-title">{{ app_name }}</h1>
-            </div>
-        </header>
-        <dl class="workspace-meta">
-            <div>
-                <dt>cwd</dt>
-                <dd>{{ state.cwd }}</dd>
-            </div>
-            <div>
-                <dt>config</dt>
-                <dd>{{ state.config_path }}</dd>
-            </div>
-            <div>
-                <dt>examples</dt>
-                <dd>{{ state.examples_dir }}</dd>
-            </div>
-            <div>
-                <dt>grammar files</dt>
-                <dd>{{ state.grammar_files | join(", ") if state.grammar_files else "not configured" }}</dd>
-            </div>
-        </dl>
-    </aside>
-
+<main class="app-shell" aria-label="File editors">
     <palimpsest-editor-workspace
-        data-workspace="examples"
-        data-browser-eyebrow="Examples"
+        data-workspace="left"
+        data-browser-eyebrow="Left Pane"
         data-browser-title="Files"
-        data-editor-eyebrow="Example"
-        data-editor-title="Example Editor"
-        data-empty-title="No example selected"
-        data-editor-label="Example source"
-        data-syntax-role="source"
+        data-editor-eyebrow="Left Pane"
+        data-editor-title="Editor"
+        data-empty-title="No file selected"
+        data-editor-label="Source"
         data-start-path="{{ state.examples_dir }}"
     ></palimpsest-editor-workspace>
 
     <palimpsest-editor-workspace
-        data-workspace="grammar"
-        data-browser-eyebrow="Grammars"
+        data-workspace="right"
+        data-browser-eyebrow="Right Pane"
         data-browser-title="Files"
-        data-editor-eyebrow="Grammar"
-        data-editor-title="Grammar Editor"
-        data-empty-title="No grammar selected"
-        data-editor-label="Grammar source"
-        data-syntax-role="grammar"
+        data-editor-eyebrow="Right Pane"
+        data-editor-title="Editor"
+        data-empty-title="No file selected"
+        data-editor-label="Source"
     ></palimpsest-editor-workspace>
 </main>
 <script type="module" src="{{ url_for('static', filename='js/app.mjs') }}?v=wasm-runtime-1"></script>

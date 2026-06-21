@@ -26,10 +26,7 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
   modeRegistry.register({
     id: "project-format",
     label: "Project format",
-    match: (file, workspace) => {
-      if (workspace.syntaxRole !== "source") {
-        return false;
-      }
+    match: (file) => {
       const runtimeId = runtimeIdForFile(file, configuredFiletypes);
       return Boolean(runtimeId && runtimes.get(runtimeId)?.ready);
     },

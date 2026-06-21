@@ -209,7 +209,6 @@ export function createEditorWorkspaceClass(dependencies) {
       const template = document.getElementById("editor-workspace-template");
       this.append(template.content.cloneNode(true));
 
-      this.syntaxRole = this.dataset.syntaxRole || "source";
       this.emptyTitle = this.dataset.emptyTitle || "No file selected";
       this.unsubscribers = [
         graph.on("runtime:changed", ({ detail }) => this.handleRuntimeChange(detail.runtime.id)),

@@ -1,6 +1,6 @@
 # Palimpsest
 
-Palimpsest is a browser workbench for developing language grammars against real project files. Point it at a project with a `palimpsest.toml`, browse example files and grammar files side by side, edit either one, and wire custom parsers/highlighters into the editor loop.
+Palimpsest is a browser workbench for developing language grammars against real project files. Point it at a project with a `palimpsest.toml`, browse project files side by side, edit either pane, and wire custom parsers/highlighters into the editor loop.
 
 ## Run
 
@@ -44,15 +44,9 @@ highlight_captures = { symbol = "variable", keyword = "keyword" }
 
 ## Workbench
 
-The UI is a fixed five-column workbench:
+The UI is a fixed four-column workbench with two file browser/editor pairs.
 
-- Project/config pane.
-- Examples file browser.
-- Example editor.
-- Grammar file browser.
-- Grammar editor.
-
-The two browser/editor pairs are instances of the same custom element. Both file browsers are flat directory views: directories open in place, and `..` moves upward until the project root.
+The left browser initially opens the configured examples directory. The right browser initially opens near the first configured grammar file and opens that file when available. After startup, both panes use the same file browsing, editing, mode detection, and highlighting behavior for any project file.
 
 ## Modes And Highlighting
 

@@ -75,18 +75,18 @@ async function initializeWorkspaces() {
   grammarFiles = await loadGrammarMetadata();
   grammarFileMap = new Map(grammarFiles.map((file) => [file.path, file]));
 
-  const sourceWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="examples"]');
-  const grammarWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="grammar"]');
+  const leftWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="left"]');
+  const rightWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="right"]');
 
   await Promise.all([
-    sourceWorkspace.openDirectory(sourceWorkspace.dataset.startPath || "."),
-    openFirstDirectory(grammarWorkspace, grammarBrowserStartCandidates()),
+    leftWorkspace.openDirectory(leftWorkspace.dataset.startPath || "."),
+    openFirstDirectory(rightWorkspace, grammarBrowserStartCandidates()),
   ]);
 
   if (grammarFiles[0]) {
-    await grammarWorkspace.openFile(grammarFiles[0].path);
+    await rightWorkspace.openFile(grammarFiles[0].path);
   } else {
-    grammarWorkspace.editor.clear(grammarWorkspace.emptyTitle);
+    rightWorkspace.editor.clear(rightWorkspace.emptyTitle);
   }
 }
 
