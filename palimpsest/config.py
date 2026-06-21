@@ -14,11 +14,17 @@ class ParserBuildConfig(pydantic.BaseModel):
     outputs: list[Path] = pydantic.Field(default_factory=list)
 
 
+class ParserRuntimeConfig(pydantic.BaseModel):
+    module: Path | None = None
+    parse_export: str = "parse_to_json"
+
+
 class ParserConfig(pydantic.BaseModel):
     id: str = ""
     adapter: str = "pest"
     grammar_files: list[Path] = pydantic.Field(default_factory=list)
     build: ParserBuildConfig = pydantic.Field(default_factory=ParserBuildConfig)
+    runtime: ParserRuntimeConfig = pydantic.Field(default_factory=ParserRuntimeConfig)
     highlight_captures: dict[str, str] = pydantic.Field(default_factory=dict)
 
 

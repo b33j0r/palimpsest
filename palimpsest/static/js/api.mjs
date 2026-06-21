@@ -14,3 +14,24 @@ export async function loadGrammarMetadata() {
   }
   return response.json();
 }
+
+export async function buildParser(parserId) {
+  const response = await fetch(`/api/parsers/${encodeURIComponent(parserId)}/build`, {
+    method: "POST",
+  });
+  const result = await response.json().catch(() => ({
+    ok: false,
+    stderr: "Build endpoint returned an invalid response.",
+  }));
+
+  if (!response.ok) {
+    result.ok = false;
+  }
+  return result;
+}
+
+export function parserRuntimeModuleUrl(parserId, modulePath) {
+  const moduleName = modulePath.split("/").pop();
+  const cacheKey = Date.now().toString(36);
+  return `/api/parsers/${encodeURIComponent(parserId)}/runtime/${encodeURIComponent(moduleName)}?v=${cacheKey}`;
+}

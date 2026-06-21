@@ -1,5 +1,7 @@
 import { findConfiguredFiletype } from "../configured_filetypes.mjs";
-import { highlightPlain, highlightSourceLike } from "../highlight/tokenizer.mjs";
+import { buildParser } from "../api.mjs";
+import { highlightPlain } from "../highlight/tokenizer.mjs";
+import { loadWasmParserRuntime } from "../highlight/wasm_runtime.mjs";
 
 const pestSettings = {
   autocompile: false,
@@ -58,26 +60,56 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
   compilers.register({
     id: "pest-project-format",
     label: "Pest project-format compiler",
-    compile: (context) => {
+    compile: async (context) => {
       const { file, workspace } = context;
       if (!file || workspace.editor.mode.id !== "pest") {
         return null;
       }
 
-      const runtimeId = `parser:${file.parser || "project-format"}`;
+      const parserId = file.parser || "project-format";
+      const runtimeId = `parser:${parserId}`;
+      const parser = parserConfig(context.appState, parserId);
+      if (!parser) {
+        workspace.editor.setStatus(`No parser config found for ${parserId}.`);
+        return null;
+      }
+
+      workspace.editor.setStatus(`Building ${parserId}...`);
+      const build = await buildParser(parserId);
+      if (!build.ok) {
+        workspace.editor.setStatus(`Build failed for ${parserId}.`);
+        console.error("Palimpsest parser build failed", build);
+        graph.emit("grammar:compile-failed", { workspace, file, build, runtimeId });
+        return null;
+      }
+
+      let wasmRuntime;
+      try {
+        workspace.editor.setStatus(`Loading ${parserId} runtime...`);
+        wasmRuntime = await loadWasmParserRuntime({
+          parser,
+          captureMap: captureMapForParser(context.appState, parserId),
+        });
+      } catch (error) {
+        workspace.editor.setStatus(`Runtime load failed for ${parserId}.`);
+        console.error("Palimpsest parser runtime load failed", error);
+        graph.emit("grammar:runtime-load-failed", { workspace, file, error, runtimeId });
+        return null;
+      }
       const runtime = runtimes.update(runtimeId, {
         grammarPath: file.path,
-        label: `${file.name || "Pest"} compiled`,
-        highlight: highlightSourceLike,
-        captureMap: captureMapForParser(context.appState, file.parser),
+        label: `${parserId} wasm runtime`,
+        highlight: wasmRuntime.highlight,
+        captureMap: wasmRuntime.captureMap,
+        parse: wasmRuntime.parse,
         ready: true,
       });
 
-      workspace.editor.setStatus(`Compiled ${file.path}.`);
-    graph.emit("grammar:compiled", { workspace, file, runtime, runtimeId });
-    return runtime;
-  },
-});
+      workspace.editor.setStatus(`Loaded ${parserId} runtime.`);
+      graph.emit("grammar:compiled", { workspace, file, runtime, runtimeId, build });
+      return runtime;
+    },
+  });
 }
 
 function runtimeIdForFile(file, filetypes) {
@@ -99,6 +131,10 @@ function captureMapForParser(appState, parserId) {
     parser?.highlight_captures || {},
     ...filetypes.map((filetype) => filetype.highlight_captures || {}),
   );
+}
+
+function parserConfig(appState, parserId) {
+  return (appState.parsers || []).find((candidate) => candidate.id === parserId) || null;
 }
 
 function pestToolbar(context, graph, compilers) {

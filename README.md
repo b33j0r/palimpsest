@@ -23,8 +23,12 @@ grammar_files = ["./crates/parser/src/*.pest"]
 highlight_captures = { rule = "function", string = "string", number = "number" }
 
 [parsers.mscm.build]
-command = "cargo build -p parser"
-outputs = ["./target/parser.wasm"]
+command = "cargo build -p parser --target wasm32-unknown-unknown && wasm-bindgen --target web --out-dir target/palimpsest/mscm --out-name parser target/wasm32-unknown-unknown/debug/parser.wasm"
+outputs = ["./target/palimpsest/mscm/parser.js", "./target/palimpsest/mscm/parser_bg.wasm"]
+
+[parsers.mscm.runtime]
+module = "./target/palimpsest/mscm/parser.js"
+parse_export = "parse_to_json"
 
 [[filetypes.mscm]]
 extensions = ["*.mscm"]
@@ -33,6 +37,8 @@ highlight_captures = { symbol = "variable", keyword = "keyword" }
 ```
 
 `grammar_files` accepts files, directories, and glob patterns, including recursive patterns like `./crates/parser/**/*.pest`. Top-level `grammar_files` is still accepted for older configs. During the transition, a `[[filetypes.name]]` table may also contain `grammar_files`; in that case the filetype name is treated as the parser id.
+
+`runtime.module` points at the browser-loadable JavaScript module produced by `wasm-bindgen --target web`. The module should export a parser function named by `parse_export`; Palimpsest calls it with source text and expects a JSON string shaped like `{ "ok": true, "tokens": [...] }` or `{ "ok": false, "error": "..." }`. The companion Rust crate at `crates/palimpsest` provides this reusable token schema and Pest span helpers so language projects can depend on Palimpsest instead of copying a private protocol.
 
 `highlight_captures` maps parser output captures to standard editor token classes. Useful targets include `comment`, `string`, `keyword`, `number`, `function`, `method`, `type`, `constructor`, `variable`, `property`, `attribute`, `constant`, `operator`, `punctuation`, and `tag`. Dotted captures follow Tree-sitter-style naming by becoming dash-separated token classes, for example `punctuation.delimiter` maps to `tok-punctuation-delimiter`.
 
@@ -54,7 +60,7 @@ Editors resolve a major mode when a file opens. Major modes own behavior: toolba
 
 That fallback registry is extensible and config-aware. It includes lightweight built-in tokenizers for common formats such as Rust, C, Python, Scheme, INI/TOML-style config, JavaScript/TypeScript, CSS, Pest, Lezer, Tree-sitter grammar files, and plain text. Configured filetypes such as `*.mscm` are also registered, so project-defined languages participate in the same mode/highlighter pipeline instead of being hardcoded into the app.
 
-The Pest major mode currently provides `Compile` and `Autocompile` controls. Compilation is wired through a browser-side compiler registry and updates a parser-scoped runtime such as `parser:mscm`; later server-side or WASM parser builds can replace that compiler implementation without changing editor/workspace contracts.
+The Pest major mode provides `Compile` and `Autocompile` controls. Compilation calls the configured server-side build command, serves the configured wasm-bindgen runtime module from the project directory, imports it in the browser, and updates a parser-scoped runtime such as `parser:mscm`. Source files with configured filetypes switch into project-format mode when their parser runtime is ready, so highlighting comes from the loaded wasm parser rather than from a fallback tokenizer.
 
 ## Code Shape
 

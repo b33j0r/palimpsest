@@ -12,11 +12,17 @@ class ParserBuildState(pydantic.BaseModel):
     outputs: list[Path]
 
 
+class ParserRuntimeState(pydantic.BaseModel):
+    module: Path | None = None
+    parse_export: str
+
+
 class ParserState(pydantic.BaseModel):
     id: str
     adapter: str
     grammar_files: list[Path]
     build: ParserBuildState
+    runtime: ParserRuntimeState
     highlight_captures: dict[str, str]
 
 
@@ -53,6 +59,10 @@ class AppState(pydantic.BaseModel):
                         command=parser.build.command,
                         cwd=config.resolve_project_path(parser.build.cwd) if parser.build.cwd else None,
                         outputs=[config.resolve_project_path(path) for path in parser.build.outputs],
+                    ),
+                    runtime=ParserRuntimeState(
+                        module=config.resolve_project_path(parser.runtime.module) if parser.runtime.module else None,
+                        parse_export=parser.runtime.parse_export,
                     ),
                     highlight_captures=parser.highlight_captures,
                 )

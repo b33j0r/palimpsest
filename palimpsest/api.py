@@ -1,7 +1,9 @@
 from pathlib import Path
+import shlex
+import subprocess
 from typing import NamedTuple
 
-from flask import Blueprint, abort, jsonify, request
+from flask import Blueprint, abort, jsonify, request, send_from_directory
 
 from palimpsest.config import Config
 from palimpsest.models import AppState, DirectoryListing, FileContent, FileEntry, GrammarFile
@@ -106,6 +108,86 @@ def create_api_blueprint(config: Config):
             for path in (candidate.path,)
         ]
         return jsonify([grammar.model_dump(mode="json") for grammar in grammar_files])
+
+    @blueprint.post("/parsers/<parser_id>/build")
+    def build_parser(parser_id: str):
+        parser = _find_parser_config(config, parser_id)
+        if parser is None:
+            abort(404, description="Parser is not configured")
+        if not parser.build.command:
+            abort(400, description="Parser does not declare a build command")
+
+        cwd = config.resolve_project_path(parser.build.cwd) if parser.build.cwd else config.cwd
+        _ensure_inside_cwd(config, cwd)
+
+        command = parser.build.command
+        try:
+            completed = subprocess.run(
+                command if isinstance(command, list) else command,
+                cwd=cwd,
+                shell=isinstance(command, str),
+                text=True,
+                capture_output=True,
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired as error:
+            return jsonify({
+                "ok": False,
+                "parser": parser.id,
+                "command": command if isinstance(command, str) else shlex.join(command),
+                "cwd": cwd.as_posix(),
+                "returncode": None,
+                "stdout": error.stdout or "",
+                "stderr": f"Build timed out after {error.timeout} seconds.",
+                "outputs": [_output_state(config, path) for path in _parser_outputs(parser)],
+            }), 504
+        except FileNotFoundError as error:
+            return jsonify({
+                "ok": False,
+                "parser": parser.id,
+                "command": command if isinstance(command, str) else shlex.join(command),
+                "cwd": cwd.as_posix(),
+                "returncode": None,
+                "stdout": "",
+                "stderr": str(error),
+                "outputs": [_output_state(config, path) for path in _parser_outputs(parser)],
+            }), 500
+
+        outputs = [_output_state(config, path) for path in _parser_outputs(parser)]
+        return jsonify({
+            "ok": completed.returncode == 0,
+            "parser": parser.id,
+            "command": command if isinstance(command, str) else shlex.join(command),
+            "cwd": cwd.as_posix(),
+            "returncode": completed.returncode,
+            "stdout": completed.stdout,
+            "stderr": completed.stderr,
+            "outputs": outputs,
+        })
+
+    @blueprint.get("/parsers/<parser_id>/runtime/<path:filename>")
+    def parser_runtime(parser_id: str, filename: str):
+        parser = _find_parser_config(config, parser_id)
+        if parser is None:
+            abort(404, description="Parser is not configured")
+        if parser.runtime.module is None:
+            abort(404, description="Parser does not declare a runtime module")
+
+        module_path = config.resolve_project_path(parser.runtime.module)
+        _ensure_inside_cwd(config, module_path)
+        runtime_dir = module_path.parent
+        target = (runtime_dir / filename).resolve()
+        _ensure_inside_cwd(config, target)
+        try:
+            target.relative_to(runtime_dir)
+        except ValueError:
+            abort(400, description="Runtime asset must stay inside the runtime module directory")
+        if not target.is_file():
+            abort(404, description="Runtime asset does not exist")
+
+        response = send_from_directory(runtime_dir, filename)
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     return blueprint
 
@@ -241,3 +323,23 @@ def _list_entries(config: Config, directory: Path) -> list[FileEntry]:
 
 def _file_sort_key(path: Path):
     return (not path.is_dir(), path.name.casefold())
+
+
+def _find_parser_config(config: Config, parser_id: str):
+    return next((parser for parser in config.parser_configs if parser.id == parser_id), None)
+
+
+def _parser_outputs(parser) -> list[Path]:
+    outputs = list(parser.build.outputs)
+    if parser.runtime.module is not None and parser.runtime.module not in outputs:
+        outputs.append(parser.runtime.module)
+    return outputs
+
+
+def _output_state(config: Config, path: Path) -> dict:
+    target = config.resolve_project_path(path)
+    return {
+        "path": target.as_posix(),
+        "exists": target.exists(),
+        "size": target.stat().st_size if target.exists() and target.is_file() else None,
+    }
