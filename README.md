@@ -4,11 +4,33 @@ Palimpsest is a browser workbench for developing language grammars against real 
 
 ## Run
 
+Install the workbench command in editable mode:
+
 ```sh
-uv run flask --app palimpsest.app run --port 5001
+uv tool install --editable /Users/brian/Projects/palimpsest
 ```
 
-Open `http://127.0.0.1:5001`.
+Then run it from any project directory that contains a `palimpsest.toml`:
+
+```sh
+cd /Users/brian/Projects/moneyscheme
+palimpsest
+```
+
+Open `http://127.0.0.1:5000`.
+
+For local development from this repository:
+
+```sh
+uv run palimpsest
+```
+
+To run against another project directory or config file:
+
+```sh
+uv run palimpsest /Users/brian/Projects/moneyscheme
+uv run palimpsest --config /Users/brian/Projects/moneyscheme/palimpsest.toml
+```
 
 ## Project Config
 
@@ -56,7 +78,7 @@ That fallback registry is extensible and config-aware. It includes lightweight b
 
 Configured parser runtimes are parser-scoped, such as `parser:mscm`. On startup, Palimpsest attempts to import each configured runtime module that already exists, so source files can enter project-format mode without a manual compile. If an artifact is missing or stale, the runtime stays unavailable and configured filetypes continue using their fallback highlighter.
 
-The Pest major mode provides `Compile` and `Autocompile` controls. Compilation calls the configured server-side build command, serves the configured wasm-bindgen runtime module from the project directory, imports it in the browser through the same parser-runtime loader, and updates the parser-scoped runtime. Source files with configured filetypes switch into project-format mode when their parser runtime is ready, so highlighting comes from the loaded wasm parser rather than from a fallback tokenizer.
+Files declared in a parser's `grammar_files` show parser build controls when that parser has a configured build command, regardless of their major mode. The build action calls the configured server-side command, serves the configured wasm-bindgen runtime module from the project directory, imports it in the browser through the parser-runtime loader, and updates the parser-scoped runtime. Source files with configured filetypes switch into project-format mode when their parser runtime is ready, so highlighting comes from the loaded wasm parser rather than from a fallback tokenizer.
 
 ## Code Shape
 

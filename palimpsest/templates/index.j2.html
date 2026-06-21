@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Palimpsest</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=wasm-runtime-1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=examples-autoload-1">
 </head>
-<body data-build="wasm-runtime-1">
+<body data-build="examples-autoload-1">
 <script type="application/json" id="app-state">{{ state | tojson }}</script>
 <template id="editor-workspace-template">
     <aside class="group-sidebar">
@@ -59,6 +59,6 @@
         data-editor-label="Source"
     ></palimpsest-editor-workspace>
 </main>
-<script type="module" src="{{ url_for('static', filename='js/app.mjs') }}?v=wasm-runtime-1"></script>
+<script type="module" src="{{ url_for('static', filename='js/app.mjs') }}?v=examples-autoload-1"></script>
 </body>
 </html>

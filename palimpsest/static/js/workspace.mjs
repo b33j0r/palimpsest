@@ -303,7 +303,7 @@ export function createEditorWorkspaceClass(dependencies) {
       const format = this.resolveFormat(enrichedFile, mode);
       const context = this.context(enrichedFile, mode, format);
       this.editor.setFile(enrichedFile, file.content, mode, context);
-      this.editor.setToolbar(mode.toolbar, context);
+      this.editor.setToolbar(() => this.renderToolbar(context), context);
       this.browser.markActive();
       graph.emit("editor:file-opened", { workspace: this, file: enrichedFile, mode, format, content: file.content });
       return true;
@@ -360,6 +360,21 @@ export function createEditorWorkspaceClass(dependencies) {
       return mode?.format?.(file) || fallbackHighlighters.detect(file);
     }
 
+    renderToolbar(context) {
+      const fragment = document.createDocumentFragment();
+      const modeControls = context.mode.toolbar?.(context);
+      const compilerControls = compilers.toolbar(context);
+
+      if (modeControls) {
+        fragment.append(modeControls);
+      }
+      if (compilerControls) {
+        fragment.append(compilerControls);
+      }
+
+      return fragment.childNodes.length ? fragment : null;
+    }
+
     handleInput() {
       graph.emit("editor:changed", {
         workspace: this,
@@ -369,6 +384,7 @@ export function createEditorWorkspaceClass(dependencies) {
       });
 
       this.editor.mode.onInput?.(this.context());
+      compilers.onInput(this.context());
     }
 
     hasUnsavedChanges() {
@@ -457,7 +473,7 @@ export function createEditorWorkspaceClass(dependencies) {
         this.editor.mode = mode;
         this.editor.renderContext = context;
         this.editor.setStatus(mode.status?.(context) || `${mode.label} mode.`);
-        this.editor.setToolbar(mode.toolbar, context);
+        this.editor.setToolbar(() => this.renderToolbar(context), context);
       }
       this.editor.queueRender(context);
       graph.emit("editor:runtime-applied", {

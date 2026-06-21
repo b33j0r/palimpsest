@@ -32,10 +32,20 @@ export class RuntimeRegistry {
 export class CompilerRegistry {
   constructor() {
     this.compilers = new Map();
+    this.toolbarProviders = [];
+    this.inputHandlers = [];
   }
 
   register(compiler) {
     this.compilers.set(compiler.id, compiler);
+  }
+
+  registerToolbar(provider) {
+    this.toolbarProviders.push(provider);
+  }
+
+  registerInputHandler(handler) {
+    this.inputHandlers.push(handler);
   }
 
   async compile(id, context) {
@@ -45,6 +55,23 @@ export class CompilerRegistry {
       return null;
     }
     return compiler.compile(context);
+  }
+
+  toolbar(context) {
+    const fragment = document.createDocumentFragment();
+    for (const provider of this.toolbarProviders) {
+      const controls = provider(context);
+      if (controls) {
+        fragment.append(controls);
+      }
+    }
+    return fragment.childNodes.length ? fragment : null;
+  }
+
+  onInput(context) {
+    for (const handler of this.inputHandlers) {
+      handler(context);
+    }
   }
 }
 

@@ -1,11 +1,8 @@
-from pathlib import Path
 import tomllib
+from pathlib import Path
 from typing import Any
 
 import pydantic
-
-
-DEFAULT_CWD = Path("~/Projects/moneyscheme").expanduser()
 
 
 class ParserBuildConfig(pydantic.BaseModel):
@@ -57,7 +54,7 @@ class ProjectConfig(pydantic.BaseModel):
 class Config(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(validate_assignment=True)
 
-    cwd: Path = DEFAULT_CWD
+    cwd: Path = Path.cwd()
     config_path: Path | None = None
     project: ProjectConfig = pydantic.Field(default_factory=ProjectConfig)
 
@@ -109,16 +106,19 @@ class Config(pydantic.BaseModel):
 
 
 def get_config(**overrides) -> Config:
-    cwd = overrides.pop("cwd", DEFAULT_CWD)
     config_path = overrides.pop("config_path", None)
-    config = Config(cwd=cwd, config_path=config_path)
+    cwd = overrides.pop("cwd", None)
+    config = Config(cwd=cwd or Path.cwd(), config_path=config_path)
+
+    if config_path is not None and cwd is None:
+        config = Config(cwd=config.config_path.parent, config_path=config.config_path)
 
     if config.config_path and config.config_path.exists():
         with config.config_path.open("rb") as config_file:
             data = tomllib.load(config_file)
         config = Config(
-            cwd=overrides.pop("cwd", config.cwd),
-            config_path=overrides.pop("config_path", config.config_path),
+            cwd=config.cwd,
+            config_path=config.config_path,
             project=ProjectConfig.model_validate(data),
             **overrides,
         )

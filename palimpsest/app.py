@@ -1,3 +1,5 @@
+import argparse
+
 from flask import Flask
 
 from palimpsest.api import create_api_blueprint
@@ -15,9 +17,31 @@ def create_app(**config_overrides):
     return app
 
 
-def main():
-    app = create_app()
-    app.run()
+def main(argv=None):
+    args = _parse_args(argv)
+    app = create_app(cwd=args.project_dir, config_path=args.config)
+    app.run(host=args.host, port=args.port, debug=args.debug)
+
+
+def _parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="palimpsest",
+        description="Run the Palimpsest grammar workbench for a project.",
+    )
+    parser.add_argument(
+        "project_dir",
+        nargs="?",
+        help="Project directory to serve. Defaults to the current working directory.",
+    )
+    parser.add_argument(
+        "-c",
+        "--config",
+        help="Path to palimpsest.toml. Defaults to palimpsest.toml in the project directory.",
+    )
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--debug", action="store_true")
+    return parser.parse_args(argv)
 
 
 if __name__ == "__main__":

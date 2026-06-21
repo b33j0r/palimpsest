@@ -1,4 +1,5 @@
 import { loadGrammarMetadata } from "./api.mjs";
+import { findConfiguredFiletype } from "./configured_filetypes.mjs";
 import { SignalGraph } from "./core/signal_graph.mjs";
 import { CompilerRegistry, FallbackHighlighterRegistry, ModeRegistry, RuntimeRegistry } from "./core/registries.mjs";
 import { normalizeConfiguredFiletypes, registerConfiguredFiletypeHighlighters } from "./configured_filetypes.mjs";
@@ -73,10 +74,13 @@ async function initializeWorkspaces() {
   const leftWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="left"]');
   const rightWorkspace = document.querySelector('palimpsest-editor-workspace[data-workspace="right"]');
 
+  const leftStartPath = leftWorkspace.dataset.startPath || ".";
   await Promise.all([
-    leftWorkspace.openDirectory(leftWorkspace.dataset.startPath || "."),
+    leftWorkspace.openDirectory(leftStartPath),
     openFirstDirectory(rightWorkspace, grammarBrowserStartCandidates()),
   ]);
+
+  await openFirstExampleFile(leftWorkspace, leftStartPath);
 
   if (grammarFiles[0]) {
     await rightWorkspace.openFile(grammarFiles[0].path);
@@ -92,6 +96,49 @@ async function openFirstDirectory(workspace, paths) {
     }
   }
   return false;
+}
+
+async function openFirstExampleFile(workspace, startPath) {
+  const path = await firstExampleFilePath(startPath);
+  if (path) {
+    await workspace.openFile(path);
+  }
+}
+
+async function firstExampleFilePath(startPath) {
+  const candidate = await firstExampleFileCandidate(startPath);
+  return candidate?.path || null;
+}
+
+async function firstExampleFileCandidate(startPath) {
+  const listing = await loadDirectory(startPath);
+  if (!listing) {
+    return null;
+  }
+
+  const files = listing.entries.filter((entry) => entry.kind === "file");
+  const configuredFile = files.find((entry) => findConfiguredFiletype(entry, configuredFiletypes));
+  if (configuredFile) {
+    return { path: configuredFile.path, configured: true };
+  }
+
+  let fallback = files[0] ? { path: files[0].path, configured: false } : null;
+  for (const directory of listing.entries.filter((entry) => entry.kind === "directory")) {
+    const nestedCandidate = await firstExampleFileCandidate(directory.path);
+    if (nestedCandidate?.configured) {
+      return nestedCandidate;
+    }
+    fallback = fallback || nestedCandidate;
+  }
+  return fallback;
+}
+
+async function loadDirectory(path) {
+  const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+  if (!response.ok) {
+    return null;
+  }
+  return response.json();
 }
 
 function grammarBrowserStartCandidates() {

@@ -76,8 +76,17 @@ where
     let span = pair.as_span();
     let start = span.start();
     let end = span.end();
-    let (start_line, start_col) = span.start_pos().line_col();
-    let (end_line, end_col) = span.end_pos().line_col();
+    token_from_byte_range(source, capture, start, end)
+}
+
+pub fn token_from_byte_range(
+    source: &str,
+    capture: &str,
+    start: usize,
+    end: usize,
+) -> HighlightToken {
+    let (start_line, start_col) = line_col(source, start);
+    let (end_line, end_col) = line_col(source, end);
 
     HighlightToken {
         capture: capture.to_string(),
@@ -89,12 +98,28 @@ where
         start_col,
         end_line,
         end_col,
-        text: span.as_str().to_string(),
+        text: source[start..end].to_string(),
     }
 }
 
 fn utf16_offset(source: &str, byte_offset: usize) -> usize {
     source[..byte_offset].encode_utf16().count()
+}
+
+fn line_col(source: &str, byte_offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut col = 1;
+
+    for ch in source[..byte_offset].chars() {
+        if ch == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+
+    (line, col)
 }
 
 #[cfg(test)]
@@ -107,5 +132,18 @@ mod tests {
         assert_eq!(utf16_offset("a💸b", 1), 1);
         assert_eq!(utf16_offset("a💸b", "a💸".len()), 3);
         assert_eq!(utf16_offset("a💸b", "a💸b".len()), 4);
+    }
+
+    #[test]
+    fn byte_range_tokens_include_position_metadata() {
+        let token = token_from_byte_range("one\n💸two", "symbol", "one\n".len(), "one\n💸".len());
+
+        assert_eq!(token.text, "💸");
+        assert_eq!(token.start_line, 2);
+        assert_eq!(token.start_col, 1);
+        assert_eq!(token.end_line, 2);
+        assert_eq!(token.end_col, 2);
+        assert_eq!(token.start_utf16, 4);
+        assert_eq!(token.end_utf16, 6);
     }
 }

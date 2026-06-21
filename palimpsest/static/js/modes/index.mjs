@@ -3,9 +3,7 @@ import { buildParser } from "../api.mjs";
 import { highlightPlain } from "../highlight/tokenizer.mjs";
 import { loadConfiguredParserRuntime, parserConfig, runtimeIdForParser } from "../parser_runtimes.mjs";
 
-const pestSettings = {
-  autocompile: false,
-};
+const parserBuildSettings = new Map();
 
 export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, compilers, graph, configuredFiletypes }) {
   modeRegistry.register(createMajorMode({
@@ -14,13 +12,6 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
     adapters: ["pest"],
     extensions: [".pest"],
     highlighterId: "pest",
-    toolbar: (context) => pestToolbar(context, graph, compilers),
-    compilerId: "pest-project-format",
-    onInput: (context) => {
-      if (pestSettings.autocompile) {
-        compilers.compile(context.mode.compilerId, context);
-      }
-    },
   }));
 
   modeRegistry.register({
@@ -54,22 +45,26 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
     status: (context) => `${context.format.label} mode.`,
   });
 
+  compilers.registerToolbar((context) => parserBuildToolbar(context, graph, compilers, configuredFiletypes));
+  compilers.registerInputHandler((context) => {
+    const buildContext = parserBuildContext(context, configuredFiletypes);
+    if (buildContext && parserBuildSetting(buildContext.parserId).autocompile) {
+      compilers.compile("parser-build", context);
+    }
+  });
+
   compilers.register({
-    id: "pest-project-format",
-    label: "Pest project-format compiler",
+    id: "parser-build",
+    label: "Parser build command",
     compile: async (context) => {
-      const { file, workspace } = context;
-      if (!file || workspace.editor.mode.id !== "pest") {
+      const buildContext = parserBuildContext(context, configuredFiletypes);
+      if (!buildContext) {
         return null;
       }
 
-      const parserId = file.parser || "project-format";
+      const { file, parser, parserId } = buildContext;
+      const { workspace } = context;
       const runtimeId = runtimeIdForParser(parserId);
-      const parser = parserConfig(context.appState, parserId);
-      if (!parser) {
-        workspace.editor.setStatus(`No parser config found for ${parserId}.`);
-        return null;
-      }
 
       if (workspace.hasUnsavedChanges?.()) {
         const saved = await workspace.save({ ifDirty: true });
@@ -86,6 +81,12 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
         console.error("Palimpsest parser build failed", build);
         graph.emit("grammar:compile-failed", { workspace, file: activeFile, build, runtimeId });
         return null;
+      }
+
+      if (!parser.runtime?.module) {
+        workspace.editor.setStatus(`Built ${parserId}.`);
+        graph.emit("grammar:compiled", { workspace, file: activeFile, runtime: null, runtimeId, build });
+        return build;
       }
 
       workspace.editor.setStatus(`Loading ${parserId} runtime...`);
@@ -117,35 +118,68 @@ function runtimeIdForFile(file, filetypes) {
   return runtimeIdForParser(filetype.parser);
 }
 
-function pestToolbar(context, graph, compilers) {
+function parserBuildToolbar(context, graph, compilers, configuredFiletypes) {
+  const buildContext = parserBuildContext(context, configuredFiletypes);
+  if (!buildContext) {
+    return null;
+  }
+
+  const { parser, parserId } = buildContext;
+  const settings = parserBuildSetting(parserId);
   const fragment = document.createDocumentFragment();
 
   const compileButton = document.createElement("button");
   compileButton.className = "text-button compact";
   compileButton.type = "button";
-  compileButton.textContent = "Compile";
-  compileButton.addEventListener("click", () => compilers.compile(context.mode.compilerId, context));
+  compileButton.textContent = `Build ${parserId}`;
+  compileButton.title = parser.build.command;
+  compileButton.addEventListener("click", () => compilers.compile("parser-build", context));
 
   const label = document.createElement("label");
   label.className = "toolbar-check";
 
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
-  checkbox.checked = pestSettings.autocompile;
+  checkbox.checked = settings.autocompile;
   checkbox.addEventListener("change", () => {
-    pestSettings.autocompile = checkbox.checked;
-    graph.emit("pest:autocompile-changed", { enabled: pestSettings.autocompile });
-    if (pestSettings.autocompile) {
-      compilers.compile(context.mode.compilerId, context);
+    settings.autocompile = checkbox.checked;
+    graph.emit("parser:autocompile-changed", { parserId, enabled: settings.autocompile });
+    if (settings.autocompile) {
+      compilers.compile("parser-build", context);
     }
   });
 
   const text = document.createElement("span");
-  text.textContent = "Autocompile";
+  text.textContent = "Autobuild";
 
   label.append(checkbox, text);
   fragment.append(compileButton, label);
   return fragment;
+}
+
+function parserBuildContext(context, configuredFiletypes) {
+  if (!context.file) {
+    return null;
+  }
+
+  const parserId = context.file.parser || findConfiguredFiletype(context.file, configuredFiletypes)?.parser;
+  if (!parserId) {
+    return null;
+  }
+
+  const parser = parserConfig(context.appState, parserId);
+  if (!parser?.build?.command) {
+    return null;
+  }
+
+  return { file: context.file, parser, parserId };
+}
+
+function parserBuildSetting(parserId) {
+  if (!parserBuildSettings.has(parserId)) {
+    parserBuildSettings.set(parserId, { autocompile: false });
+  }
+  return parserBuildSettings.get(parserId);
 }
 
 function createMajorMode({ id, label, adapters = [], filenames = [], extensions = [], highlighterId, toolbar, compilerId, onInput }) {
