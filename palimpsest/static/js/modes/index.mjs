@@ -149,6 +149,35 @@ function parserBuildToolbar(context, graph, compilers, configuredFiletypes) {
   const { parser, parserId } = buildContext;
   const settings = parserBuildSetting(parserId);
   const fragment = document.createDocumentFragment();
+  const parserFilePath = firstParserFile(parser);
+  const oppositeWorkspace = oppositePane(context.workspace, graph);
+
+  const parserButton = document.createElement("button");
+  parserButton.className = "text-button compact parser-jump-button";
+  parserButton.type = "button";
+  parserButton.textContent = "Parser";
+  parserButton.disabled = !parserFilePath || !oppositeWorkspace;
+  parserButton.title = parserFilePath
+    ? `Open ${parserFilePath} in the opposite pane`
+    : `Parser ${parserId} does not declare a parser source file`;
+  parserButton.addEventListener("click", async () => {
+    if (!parserFilePath || !oppositeWorkspace) {
+      return;
+    }
+    graph.emit("parser:file-reveal-requested", {
+      workspace: context.workspace,
+      targetWorkspace: oppositeWorkspace,
+      parserId,
+      path: parserFilePath,
+    });
+    const opened = await oppositeWorkspace.revealFile(parserFilePath);
+    graph.emit(opened ? "parser:file-revealed" : "parser:file-reveal-cancelled", {
+      workspace: context.workspace,
+      targetWorkspace: oppositeWorkspace,
+      parserId,
+      path: parserFilePath,
+    });
+  });
 
   const compileButton = document.createElement("button");
   compileButton.className = "text-button compact";
@@ -179,7 +208,7 @@ function parserBuildToolbar(context, graph, compilers, configuredFiletypes) {
     : "Autobuild";
 
   label.append(checkbox, text);
-  fragment.append(compileButton, label);
+  fragment.append(parserButton, compileButton, label);
   return fragment;
 }
 
@@ -219,6 +248,23 @@ function refreshToolbar(workspace) {
   }
   const context = workspace.context();
   workspace.editor.setToolbar(() => workspace.renderToolbar(context), context);
+}
+
+function firstParserFile(parser) {
+  return parser?.grammar_files?.[0] || null;
+}
+
+function oppositePane(workspace, graph) {
+  const side = workspace?.dataset?.workspace;
+  if (!side) {
+    return null;
+  }
+
+  const targetSide = side === "left" ? "right" : side === "right" ? "left" : null;
+  if (!targetSide) {
+    return null;
+  }
+  return (graph.get("workspaces") || new Map()).get(targetSide) || null;
 }
 
 function createMajorMode({ id, label, adapters = [], filenames = [], extensions = [], highlighterId, toolbar, compilerId, onInput }) {

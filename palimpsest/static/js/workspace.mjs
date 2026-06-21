@@ -219,6 +219,7 @@ export function createEditorWorkspaceClass(dependencies) {
         graph.on("editor:file-saved", ({ detail }) => this.handleFileSaved(detail)),
         graph.on("editor:dirty-changed", ({ detail }) => this.handleDirtyChanged(detail)),
         graph.on("runtime:changed", ({ detail }) => this.handleRuntimeChange(detail.runtime.id)),
+        graph.on("workspaces:changed", () => this.handleWorkspaceRegistryChanged()),
       ];
 
       const sourceTitle = this.querySelector("[data-source-title]");
@@ -258,6 +259,7 @@ export function createEditorWorkspaceClass(dependencies) {
         onOpenFile: (path) => this.openFile(path),
         getActivePath: () => this.editor.file?.path,
       });
+      registerWorkspace(graph, this);
 
       this.renderSaveButtonState(false);
       this.saveButton.addEventListener("click", () => this.save());
@@ -269,6 +271,7 @@ export function createEditorWorkspaceClass(dependencies) {
       for (const unsubscribe of this.unsubscribers || []) {
         unsubscribe();
       }
+      unregisterWorkspace(graph, this);
       if (this.beforeUnloadHandler) {
         window.removeEventListener("beforeunload", this.beforeUnloadHandler);
       }
@@ -288,15 +291,15 @@ export function createEditorWorkspaceClass(dependencies) {
       };
     }
 
-    async openDirectory(path) {
-      if (!this.confirmDiscardUnsavedChanges("open another directory")) {
+    async openDirectory(path, { confirm = true } = {}) {
+      if (confirm && !this.confirmDiscardUnsavedChanges("open another directory")) {
         return false;
       }
       return this.browser.open(path);
     }
 
-    async openFile(path) {
-      if (!this.confirmDiscardUnsavedChanges("open another file")) {
+    async openFile(path, { confirm = true } = {}) {
+      if (confirm && !this.confirmDiscardUnsavedChanges("open another file")) {
         return false;
       }
       this.editor.clear(path);
@@ -319,6 +322,21 @@ export function createEditorWorkspaceClass(dependencies) {
       this.browser.markActive();
       graph.emit("editor:file-opened", { workspace: this, file: enrichedFile, mode, format, content: file.content });
       return true;
+    }
+
+    async revealFile(path) {
+      if (!this.confirmDiscardUnsavedChanges("open another file")) {
+        return false;
+      }
+
+      const directory = parentPath(path);
+      if (directory !== null) {
+        const openedDirectory = await this.openDirectory(directory, { confirm: false });
+        if (!openedDirectory) {
+          return false;
+        }
+      }
+      return this.openFile(path, { confirm: false });
     }
 
     async save({ ifDirty = false } = {}) {
@@ -497,6 +515,14 @@ export function createEditorWorkspaceClass(dependencies) {
       this.saveButton.title = dirty ? "Unsaved changes" : "No unsaved changes";
     }
 
+    handleWorkspaceRegistryChanged() {
+      if (!this.editor) {
+        return;
+      }
+      const context = this.context();
+      this.editor.setToolbar(() => this.renderToolbar(context), context);
+    }
+
     showBuildResult(build) {
       if (!this.buildResult || !build) {
         return;
@@ -580,4 +606,19 @@ function outputSummary(outputs) {
   return outputs
     .map((output) => `${output.exists ? "OK" : "Missing"} ${output.path}${output.size ? ` (${output.size} B)` : ""}`)
     .join(", ");
+}
+
+function registerWorkspace(graph, workspace) {
+  const workspaces = new Map(graph.get("workspaces") || []);
+  workspaces.set(workspace.dataset.workspace, workspace);
+  graph.set("workspaces", workspaces);
+}
+
+function unregisterWorkspace(graph, workspace) {
+  const workspaces = new Map(graph.get("workspaces") || []);
+  if (workspaces.get(workspace.dataset.workspace) !== workspace) {
+    return;
+  }
+  workspaces.delete(workspace.dataset.workspace);
+  graph.set("workspaces", workspaces);
 }

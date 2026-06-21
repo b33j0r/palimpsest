@@ -532,6 +532,11 @@ html[data-resizing="true"] * {
   color: var(--warn);
 }
 
+.parser-jump-button {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--line));
+  color: var(--accent-strong);
+}
+
 .mode-toolbar-items {
   display: flex;
   align-items: center;
