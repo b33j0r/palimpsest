@@ -39,10 +39,17 @@ A project config declares examples, parser definitions, and filetypes that use t
 ```toml
 examples_dir = "./examples"
 
+[capture_maps.mscm]
+rule = "function"
+symbol = "variable"
+string = "string"
+number = "number"
+keyword = "keyword"
+
 [[parsers.mscm]]
 adapter = "pest"
 grammar_files = ["./crates/parser/src/*.pest"]
-highlight_captures = { rule = "function", string = "string", number = "number" }
+highlight_captures = "mscm"
 
 [parsers.mscm.build]
 command = "cargo build -p parser --target wasm32-unknown-unknown && wasm-bindgen --target web --out-dir target/palimpsest/mscm --out-name parser target/wasm32-unknown-unknown/debug/parser.wasm"

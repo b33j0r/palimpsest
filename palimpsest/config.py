@@ -22,7 +22,7 @@ class ParserConfig(pydantic.BaseModel):
     grammar_files: list[Path] = pydantic.Field(default_factory=list)
     build: ParserBuildConfig = pydantic.Field(default_factory=ParserBuildConfig)
     runtime: ParserRuntimeConfig = pydantic.Field(default_factory=ParserRuntimeConfig)
-    highlight_captures: dict[str, str] = pydantic.Field(default_factory=dict)
+    highlight_captures: dict[str, str] | str | None = None
 
 
 class FiletypeConfig(pydantic.BaseModel):
@@ -30,12 +30,13 @@ class FiletypeConfig(pydantic.BaseModel):
     extensions: list[str] = pydantic.Field(default_factory=list)
     parser: str | None = None
     grammar_files: list[Path] = pydantic.Field(default_factory=list)
-    highlight_captures: dict[str, str] = pydantic.Field(default_factory=dict)
+    highlight_captures: dict[str, str] | str | None = None
 
 
 class ProjectConfig(pydantic.BaseModel):
     examples_dir: Path = Path("examples")
     grammar_files: list[Path] = pydantic.Field(default_factory=list)
+    capture_maps: dict[str, dict[str, str]] = pydantic.Field(default_factory=dict)
     parsers: list[ParserConfig] = pydantic.Field(default_factory=list)
     filetypes: list[FiletypeConfig] = pydantic.Field(default_factory=list)
 
@@ -49,6 +50,42 @@ class ProjectConfig(pydantic.BaseModel):
         for key in ("parsers", "filetypes"):
             normalized[key] = _flatten_named_config_table(normalized.get(key), key[:-1])
         return normalized
+
+    @pydantic.model_validator(mode="after")
+    def resolve_highlight_captures(self):
+        parser_captures = {}
+        for parser in self.parsers:
+            captures = self._resolve_capture_reference(
+                parser.highlight_captures,
+                f"parser {parser.id}",
+            )
+            parser.highlight_captures = captures
+            parser_captures[parser.id] = captures
+
+        for filetype in self.filetypes:
+            parser_id = filetype.parser or filetype.id
+            inherited = dict(parser_captures.get(parser_id, {}))
+            captures = self._resolve_capture_reference(
+                filetype.highlight_captures,
+                f"filetype {filetype.id}",
+            )
+            inherited.update(captures)
+            filetype.highlight_captures = inherited
+
+        return self
+
+    def _resolve_capture_reference(
+        self,
+        value: dict[str, str] | str | None,
+        owner: str,
+    ) -> dict[str, str]:
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            if value not in self.capture_maps:
+                raise ValueError(f"Unknown capture map {value!r} referenced by {owner}")
+            return dict(self.capture_maps[value])
+        return dict(value)
 
 
 class Config(pydantic.BaseModel):
