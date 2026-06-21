@@ -130,14 +130,10 @@ grammar_files = ["./crates/parser/src/*.pest"]
 highlight_captures = { symbol = "variable", string = "string", number = "number" }
 
 [parsers.my_language.build]
-command = "cargo build -p parser --target wasm32-unknown-unknown && wasm-bindgen --target web --out-dir target/palimpsest/my-language --out-name parser target/wasm32-unknown-unknown/debug/parser.wasm"
-outputs = [
-  "./target/palimpsest/my-language/parser.js",
-  "./target/palimpsest/my-language/parser_bg.wasm",
-]
+preset = "cargo-wasm-bindgen"
+package = "parser"
 
 [parsers.my_language.runtime]
-module = "./target/palimpsest/my-language/parser.js"
 parse_export = "parse_to_json"
 
 [[filetypes.my_language]]
@@ -145,6 +141,10 @@ extensions = ["*.my"]
 parser = "my_language"
 highlight_captures = { symbol = "variable", string = "string", number = "number" }
 ```
+
+The preset derives the `wasm-bindgen` output paths and `runtime.module`.
+Use `build.command` for custom build flows that do not fit this Rust/WASM
+layout.
 
 When the Pest major mode compiles this parser, Palimpsest imports `parser.js`,
 loads the companion `.wasm`, calls `parse_to_json`, and renders matching source

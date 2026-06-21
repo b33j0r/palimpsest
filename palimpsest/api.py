@@ -114,22 +114,15 @@ def create_api_blueprint(config: Config):
         parser = _find_parser_config(config, parser_id)
         if parser is None:
             abort(404, description="Parser is not configured")
-        if not parser.build.command:
+        if not parser.build.has_build:
             abort(400, description="Parser does not declare a build command")
 
         cwd = config.resolve_project_path(parser.build.cwd) if parser.build.cwd else config.cwd
         _ensure_inside_cwd(config, cwd)
 
-        command = parser.build.command
+        command = parser.build.display_command()
         try:
-            completed = subprocess.run(
-                command if isinstance(command, list) else command,
-                cwd=cwd,
-                shell=isinstance(command, str),
-                text=True,
-                capture_output=True,
-                timeout=120,
-            )
+            completed = _run_parser_build(parser, cwd)
         except subprocess.TimeoutExpired as error:
             return jsonify({
                 "ok": False,
@@ -327,6 +320,44 @@ def _file_sort_key(path: Path):
 
 def _find_parser_config(config: Config, parser_id: str):
     return next((parser for parser in config.parser_configs if parser.id == parser_id), None)
+
+
+def _run_parser_build(parser, cwd: Path) -> subprocess.CompletedProcess:
+    if parser.build.command is not None:
+        command = parser.build.command
+        return subprocess.run(
+            command if isinstance(command, list) else command,
+            cwd=cwd,
+            shell=isinstance(command, str),
+            text=True,
+            capture_output=True,
+            timeout=120,
+        )
+
+    stdout = []
+    stderr = []
+    returncode = 0
+    for command in parser.build.preset_commands():
+        completed = subprocess.run(
+            command,
+            cwd=cwd,
+            shell=False,
+            text=True,
+            capture_output=True,
+            timeout=120,
+        )
+        stdout.append(completed.stdout)
+        stderr.append(completed.stderr)
+        returncode = completed.returncode
+        if completed.returncode != 0:
+            break
+
+    return subprocess.CompletedProcess(
+        args=parser.build.display_command(),
+        returncode=returncode,
+        stdout="".join(stdout),
+        stderr="".join(stderr),
+    )
 
 
 def _parser_outputs(parser) -> list[Path]:

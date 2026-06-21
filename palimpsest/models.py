@@ -56,7 +56,7 @@ class AppState(pydantic.BaseModel):
                     adapter=parser.adapter,
                     grammar_files=[config.resolve_project_path(path) for path in parser.grammar_files],
                     build=ParserBuildState(
-                        command=parser.build.command,
+                        command=parser.build.display_command(),
                         cwd=config.resolve_project_path(parser.build.cwd) if parser.build.cwd else None,
                         outputs=[config.resolve_project_path(path) for path in parser.build.outputs],
                     ),

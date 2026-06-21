@@ -101,5 +101,120 @@ class HighlightCaptureConfigTests(unittest.TestCase):
         self.assertIn("Unknown capture map 'missing'", str(error.exception))
 
 
+class BuildPresetConfigTests(unittest.TestCase):
+    def test_cargo_wasm_bindgen_preset_derives_build_paths(self):
+        config = ProjectConfig.model_validate({
+            "parsers": {
+                "demo": {
+                    "build": {
+                        "preset": "cargo-wasm-bindgen",
+                        "package": "demo-parser",
+                    },
+                },
+            },
+        })
+
+        parser = config.parsers[0]
+
+        self.assertEqual(
+            parser.build.display_command(),
+            "cargo build -p demo-parser --target wasm32-unknown-unknown && "
+            "wasm-bindgen --target web --out-dir target/palimpsest/demo "
+            "--out-name parser target/wasm32-unknown-unknown/debug/demo_parser.wasm",
+        )
+        self.assertEqual(
+            [path.as_posix() for path in parser.build.outputs],
+            [
+                "target/palimpsest/demo/parser.js",
+                "target/palimpsest/demo/parser_bg.wasm",
+            ],
+        )
+        self.assertEqual(
+            parser.runtime.module.as_posix(),
+            "target/palimpsest/demo/parser.js",
+        )
+
+    def test_cargo_wasm_bindgen_preset_accepts_overrides(self):
+        config = ProjectConfig.model_validate({
+            "parsers": {
+                "demo": {
+                    "build": {
+                        "preset": "cargo-wasm-bindgen",
+                        "package": "demo-parser",
+                        "release": True,
+                        "wasm": "target/custom/demo.wasm",
+                        "out_dir": "target/custom/palimpsest",
+                        "out_name": "demo",
+                    },
+                    "runtime": {
+                        "module": "target/custom/runtime.js",
+                    },
+                },
+            },
+        })
+
+        parser = config.parsers[0]
+
+        self.assertEqual(
+            parser.build.preset_commands(),
+            [
+                [
+                    "cargo",
+                    "build",
+                    "-p",
+                    "demo-parser",
+                    "--target",
+                    "wasm32-unknown-unknown",
+                    "--release",
+                ],
+                [
+                    "wasm-bindgen",
+                    "--target",
+                    "web",
+                    "--out-dir",
+                    "target/custom/palimpsest",
+                    "--out-name",
+                    "demo",
+                    "target/custom/demo.wasm",
+                ],
+            ],
+        )
+        self.assertEqual(
+            [path.as_posix() for path in parser.build.outputs],
+            [
+                "target/custom/palimpsest/demo.js",
+                "target/custom/palimpsest/demo_bg.wasm",
+            ],
+        )
+        self.assertEqual(parser.runtime.module.as_posix(), "target/custom/runtime.js")
+
+    def test_build_command_still_works_as_escape_hatch(self):
+        config = ProjectConfig.model_validate({
+            "parsers": {
+                "demo": {
+                    "build": {
+                        "command": "make parser",
+                    },
+                },
+            },
+        })
+
+        self.assertEqual(config.parsers[0].build.display_command(), "make parser")
+
+    def test_cargo_wasm_bindgen_preset_requires_package(self):
+        with self.assertRaises(pydantic.ValidationError) as error:
+            ProjectConfig.model_validate({
+                "parsers": {
+                    "demo": {
+                        "build": {
+                            "preset": "cargo-wasm-bindgen",
+                        },
+                    },
+                },
+            })
+
+        self.assertIn("uses cargo-wasm-bindgen build preset without package", str(error.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

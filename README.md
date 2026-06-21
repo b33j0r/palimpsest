@@ -52,14 +52,10 @@ grammar_files = ["./crates/parser/src/*.pest"]
 highlight_captures = "my_language"
 
 [parsers.my_language.build]
-command = "cargo build -p parser --target wasm32-unknown-unknown && wasm-bindgen --target web --out-dir target/palimpsest/my-language --out-name parser target/wasm32-unknown-unknown/debug/parser.wasm"
-outputs = [
-  "./target/palimpsest/my-language/parser.js",
-  "./target/palimpsest/my-language/parser_bg.wasm",
-]
+preset = "cargo-wasm-bindgen"
+package = "parser"
 
 [parsers.my_language.runtime]
-module = "./target/palimpsest/my-language/parser.js"
 parse_export = "parse_to_json"
 
 [[filetypes.my_language]]
@@ -70,6 +66,16 @@ parser = "my_language"
 `grammar_files` accepts files, directories, and glob patterns, including
 recursive patterns such as `./crates/parser/**/*.pest`. Grammar files show build
 controls when their parser has a configured build command.
+
+The `cargo-wasm-bindgen` build preset expands to:
+
+```sh
+cargo build -p parser --target wasm32-unknown-unknown
+wasm-bindgen --target web --out-dir target/palimpsest/my_language --out-name parser target/wasm32-unknown-unknown/debug/parser.wasm
+```
+
+It also derives `build.outputs` and `runtime.module` when they are omitted.
+Use `build.command` only for custom build flows that do not fit the preset.
 
 `runtime.module` points at the browser-loadable JavaScript module produced by
 `wasm-bindgen --target web`. The module should export the parser function named
