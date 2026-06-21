@@ -14,6 +14,8 @@ const configuredFiletypes = normalizeConfiguredFiletypes(appState);
 
 let grammarFiles = [];
 let grammarFileMap = new Map();
+let healthRefreshActive = false;
+let healthRefreshQueued = false;
 
 const graph = new SignalGraph();
 const runtimes = new RuntimeRegistry({graph});
@@ -296,9 +298,6 @@ function installHealthRefreshController() {
         refreshHealth({reason: "parser-build-finished", parserId: detail.parserId});
     });
 }
-
-let healthRefreshActive = false;
-let healthRefreshQueued = false;
 
 async function refreshHealth({reason = "manual", parserId = null} = {}) {
     if (healthRefreshActive) {
