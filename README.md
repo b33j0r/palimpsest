@@ -5,6 +5,8 @@ project files. It opens a project configured with `palimpsest.toml`, shows two
 file browser/editor panes, and can load project-specific parser runtimes for
 syntax highlighting.
 
+![Palimpsest workbench screenshot](docs/ui-001.png)
+
 ## Run
 
 Install the command from a local checkout:
@@ -112,13 +114,19 @@ by `parse_export`. Palimpsest calls that function with source text and expects a
 JSON string:
 
 ```json
-{ "ok": true, "tokens": [] }
+{
+  "ok": true,
+  "tokens": []
+}
 ```
 
 or:
 
 ```json
-{ "ok": false, "error": "parse failed" }
+{
+  "ok": false,
+  "error": "parse failed"
+}
 ```
 
 The Rust crate in `crates/palimpsest` provides the shared token schema, Pest span
