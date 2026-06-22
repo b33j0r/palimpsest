@@ -2,6 +2,71 @@ import { loadWasmParserRuntime } from "./highlight/wasm_runtime.mjs";
 import { loadLezerParserRuntime } from "./highlight/lezer_runtime.mjs";
 import { loadTreeSitterParserRuntime } from "./highlight/tree_sitter_runtime.mjs";
 
+export class ParserRuntimeLoaderRegistry {
+  constructor({ defaultLoader = null } = {}) {
+    this.loaders = new Map();
+    this.loaderOrder = [];
+    this.defaultLoader = defaultLoader;
+    if (defaultLoader?.id) {
+      this.loaders.set(defaultLoader.id, defaultLoader);
+    }
+  }
+
+  register(loader) {
+    this.loaders.set(loader.id, loader);
+    this.loaderOrder = this.loaderOrder.filter((existing) => existing.id !== loader.id);
+    this.loaderOrder.push(loader);
+    return loader;
+  }
+
+  get(id) {
+    return this.loaders.get(id) || null;
+  }
+
+  async load({ parser, captureMap }) {
+    const loader = this.loaderOrder.find((candidate) => candidate.match?.(parser)) || this.defaultLoader;
+    if (!loader?.load) {
+      throw new Error(`No parser runtime loader registered for adapter ${parser?.adapter || "unknown"}.`);
+    }
+    return loader.load({ parser, captureMap });
+  }
+}
+
+export function createDefaultParserRuntimeLoaderRegistry() {
+  const registry = new ParserRuntimeLoaderRegistry({
+    defaultLoader: {
+      id: "wasm",
+      match: () => true,
+      load: loadWasmParserRuntime,
+    },
+  });
+
+  registry.register({
+    id: "lezer",
+    match: (parser) => parser.adapter === "lezer",
+    load: loadLezerParserRuntime,
+  });
+  registry.register({
+    id: "tree-sitter",
+    match: (parser) => parser.adapter === "tree-sitter",
+    load: loadTreeSitterParserRuntime,
+  });
+  registry.register({
+    id: "pest",
+    match: (parser) => parser.adapter === "pest",
+    load: loadWasmParserRuntime,
+  });
+  registry.register({
+    id: "nom",
+    match: (parser) => parser.adapter === "nom",
+    load: loadWasmParserRuntime,
+  });
+
+  return registry;
+}
+
+export const PARSER_RUNTIME_LOADERS = createDefaultParserRuntimeLoaderRegistry();
+
 export function registerConfiguredParserRuntimes({ appState, runtimes }) {
   for (const parser of parserRuntimeConfigs(appState)) {
     runtimes.register({
@@ -26,7 +91,14 @@ export async function hydrateConfiguredParserRuntimes({ appState, graph, runtime
     .map((result) => result.value);
 }
 
-export async function loadConfiguredParserRuntime({ appState, graph, parserId, runtimes, grammarPath = "" }) {
+export async function loadConfiguredParserRuntime({
+  appState,
+  graph,
+  parserId,
+  runtimes,
+  grammarPath = "",
+  loaderRegistry = PARSER_RUNTIME_LOADERS,
+}) {
   const runtimeId = runtimeIdForParser(parserId);
   const parser = parserConfig(appState, parserId);
   if (!parser) {
@@ -40,7 +112,7 @@ export async function loadConfiguredParserRuntime({ appState, graph, parserId, r
 
   let runtime;
   try {
-    runtime = await loadParserRuntime({
+    runtime = await loaderRegistry.load({
       parser,
       captureMap: captureMapForParser(appState, parserId),
     });
@@ -83,14 +155,4 @@ export function captureMapForParser(appState, parserId) {
 
 function parserRuntimeConfigs(appState) {
   return (appState.parsers || []).filter((parser) => parser.runtime?.module);
-}
-
-function loadParserRuntime({ parser, captureMap }) {
-  if (parser.adapter === "lezer") {
-    return loadLezerParserRuntime({ parser, captureMap });
-  }
-  if (parser.adapter === "tree-sitter") {
-    return loadTreeSitterParserRuntime({ parser, captureMap });
-  }
-  return loadWasmParserRuntime({ parser, captureMap });
 }
