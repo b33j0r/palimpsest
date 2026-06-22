@@ -5,6 +5,7 @@ from palimpsest.highlight.config import (
     ParserConfig,
     ParserRuntimeConfig,
 )
+from palimpsest.highlight import presets as presets
 
 __all__ = [
     "BUILD_PRESETS",
@@ -12,4 +13,5 @@ __all__ = [
     "ParserBuildConfig",
     "ParserConfig",
     "ParserRuntimeConfig",
+    "presets",
 ]
