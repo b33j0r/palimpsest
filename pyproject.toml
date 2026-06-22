@@ -32,4 +32,4 @@ Repository = "https://github.com/b33j0r/palimpsest"
 Issues = "https://github.com/b33j0r/palimpsest/issues"
 
 [project.scripts]
-palimpsest = "palimpsest.app:main"
+palimpsest = "palimpsest.cli:main"

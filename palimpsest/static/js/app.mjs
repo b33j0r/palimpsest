@@ -295,7 +295,7 @@ function installHealthRefreshController() {
         graph.set("projectHealthLoading", true);
     });
     graph.on("parser:build-finished", ({detail}) => {
-        refreshHealth({reason: "parser-build-finished", parserId: detail.parserId});
+        refreshHealth({reason: "highlighter-build-finished", parserId: detail.parserId});
     });
 }
 
@@ -355,7 +355,7 @@ function renderHealth(health, {loading = false} = {}) {
             name: item.name,
             detail: item.path || item.reason || "",
         })),
-        healthList("Parsers", health.parsers || [], (parser) => ({
+        healthList("Highlighters", health.parsers || [], (parser) => ({
             status: parser.ok ? "OK" : "Check",
             tone: parser.ok ? "ok" : "warn",
             name: parser.id,

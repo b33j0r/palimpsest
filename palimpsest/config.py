@@ -1,160 +1,17 @@
-import os
-import shlex
 import tomllib
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import pydantic
 
-
-class ParserBuildConfig(pydantic.BaseModel):
-    command: str | list[str] | None = None
-    preset: Literal["cargo-wasm-bindgen", "lezer", "tree-sitter"] | None = None
-    package: str | None = None
-    target: str = "wasm32-unknown-unknown"
-    profile: str = "debug"
-    release: bool = False
-    grammar: Path | None = None
-    wasm: Path | None = None
-    out_dir: Path | None = None
-    out_name: str = "parser"
-    export_name: str = "parser"
-    cwd: Path | None = None
-    outputs: list[Path] = pydantic.Field(default_factory=list)
-
-    @property
-    def has_build(self) -> bool:
-        return self.command is not None or self.preset is not None
-
-    def preset_commands(self) -> list[list[str]]:
-        if self.preset == "cargo-wasm-bindgen":
-            if not self.package:
-                raise ValueError("cargo-wasm-bindgen build preset requires package")
-            if self.wasm is None:
-                raise ValueError("cargo-wasm-bindgen build preset requires wasm")
-            if self.out_dir is None:
-                raise ValueError("cargo-wasm-bindgen build preset requires out_dir")
-
-            cargo = ["cargo", "build", "-p", self.package, "--target", self.target]
-            if self.release:
-                cargo.append("--release")
-
-            bindgen = [
-                "wasm-bindgen",
-                "--target",
-                "web",
-                "--out-dir",
-                self.out_dir.as_posix(),
-                "--out-name",
-                self.out_name,
-                self.wasm.as_posix(),
-            ]
-            return [cargo, bindgen]
-
-        if self.preset == "lezer":
-            if self.grammar is None:
-                raise ValueError("lezer build preset requires grammar file")
-            if self.out_dir is None:
-                raise ValueError("lezer build preset requires out_dir")
-
-            generated = self.out_dir / f"{self.out_name}.generated.js"
-            module = self.out_dir / f"{self.out_name}.js"
-            return [
-                ["mkdir", "-p", self.out_dir.as_posix()],
-                [
-                    "npx",
-                    "lezer-generator",
-                    "--output",
-                    generated.as_posix(),
-                    "--export",
-                    self.export_name,
-                    self.grammar.as_posix(),
-                ],
-                [
-                    "npx",
-                    "esbuild",
-                    generated.as_posix(),
-                    "--bundle",
-                    "--format=esm",
-                    f"--outfile={module.as_posix()}",
-                ],
-            ]
-
-        if self.preset == "tree-sitter":
-            if self.grammar is None:
-                raise ValueError("tree-sitter build preset requires grammar file")
-            if self.out_dir is None:
-                raise ValueError("tree-sitter build preset requires out_dir")
-
-            parser_wasm = self.out_dir / f"{self.out_name}.wasm"
-            module = self.out_dir / f"{self.out_name}.js"
-            engine_wasm = self.out_dir / "web-tree-sitter.wasm"
-            grammar_dir = self.grammar.parent
-            grammar_name = self.grammar.name
-            grammar_parser_wasm = Path(os.path.relpath(parser_wasm, grammar_dir)).as_posix()
-            return [
-                ["mkdir", "-p", self.out_dir.as_posix()],
-                [
-                    "sh",
-                    "-c",
-                    f"cd {shlex.quote(grammar_dir.as_posix())} && "
-                    f"npx tree-sitter generate {shlex.quote(grammar_name)}",
-                ],
-                [
-                    "sh",
-                    "-c",
-                    f"cd {shlex.quote(grammar_dir.as_posix())} && "
-                    f"npx tree-sitter build --wasm -o {shlex.quote(grammar_parser_wasm)} .",
-                ],
-                [
-                    "npx",
-                    "esbuild",
-                    "palimpsest/static/js/highlight/tree_sitter_runtime_entry.mjs",
-                    "--bundle",
-                    "--format=esm",
-                    "--outfile=" + module.as_posix(),
-                    "--external:fs",
-                    "--external:module",
-                    "--external:node:module",
-                ],
-                [
-                    "cp",
-                    "node_modules/web-tree-sitter/web-tree-sitter.wasm",
-                    engine_wasm.as_posix(),
-                ],
-            ]
-
-        return []
-
-    def display_command(self) -> str | list[str] | None:
-        if self.command is not None:
-            return self.command
-        commands = self.preset_commands()
-        if commands:
-            return " && ".join(shlex.join(command) for command in commands)
-        return None
-
-
-class ParserRuntimeConfig(pydantic.BaseModel):
-    module: Path | None = None
-    parse_export: str = "parse_to_json"
-
-
-class ParserConfig(pydantic.BaseModel):
-    id: str = ""
-    adapter: str = "pest"
-    grammar_files: list[Path] = pydantic.Field(default_factory=list)
-    build: ParserBuildConfig = pydantic.Field(default_factory=ParserBuildConfig)
-    runtime: ParserRuntimeConfig = pydantic.Field(default_factory=ParserRuntimeConfig)
-    highlight_captures: dict[str, str] | str | None = None
-
-
-class FiletypeConfig(pydantic.BaseModel):
-    id: str = ""
-    extensions: list[str] = pydantic.Field(default_factory=list)
-    parser: str | None = None
-    grammar_files: list[Path] = pydantic.Field(default_factory=list)
-    highlight_captures: dict[str, str] | str | None = None
+from palimpsest.highlight.config import (
+    BUILD_PRESETS,
+    CaptureMapResolver,
+    FiletypeConfig,
+    ParserBuildConfig,
+    ParserConfig,
+    ParserRuntimeConfig,
+)
 
 
 class ProjectConfig(pydantic.BaseModel):
@@ -177,9 +34,10 @@ class ProjectConfig(pydantic.BaseModel):
 
     @pydantic.model_validator(mode="after")
     def resolve_highlight_captures(self):
+        resolver = CaptureMapResolver(self.capture_maps)
         parser_captures = {}
         for parser in self.parsers:
-            captures = self._resolve_capture_reference(
+            captures = resolver.resolve(
                 parser.highlight_captures,
                 f"parser {parser.id}",
             )
@@ -189,7 +47,7 @@ class ProjectConfig(pydantic.BaseModel):
         for filetype in self.filetypes:
             parser_id = filetype.parser or filetype.id
             inherited = dict(parser_captures.get(parser_id, {}))
-            captures = self._resolve_capture_reference(
+            captures = resolver.resolve(
                 filetype.highlight_captures,
                 f"filetype {filetype.id}",
             )
@@ -201,26 +59,9 @@ class ProjectConfig(pydantic.BaseModel):
     @pydantic.model_validator(mode="after")
     def resolve_build_presets(self):
         for parser in self.parsers:
-            if parser.build.preset == "cargo-wasm-bindgen":
-                _resolve_cargo_wasm_bindgen_build(parser)
-            elif parser.build.preset == "lezer":
-                _resolve_lezer_build(parser)
-            elif parser.build.preset == "tree-sitter":
-                _resolve_tree_sitter_build(parser)
+            if parser.build.preset:
+                BUILD_PRESETS.get(parser.build.preset).resolve(parser)
         return self
-
-    def _resolve_capture_reference(
-        self,
-        value: dict[str, str] | str | None,
-        owner: str,
-    ) -> dict[str, str]:
-        if value is None:
-            return {}
-        if isinstance(value, str):
-            if value not in self.capture_maps:
-                raise ValueError(f"Unknown capture map {value!r} referenced by {owner}")
-            return dict(self.capture_maps[value])
-        return dict(value)
 
 
 class Config(pydantic.BaseModel):
@@ -330,83 +171,3 @@ def _flatten_named_config_table(value: Any, fallback_prefix: str) -> list[dict[s
         return [normalized]
     return flattened
 
-
-def _resolve_cargo_wasm_bindgen_build(parser: ParserConfig):
-    build = parser.build
-    if not build.package:
-        raise ValueError(
-            f"Parser {parser.id!r} uses cargo-wasm-bindgen build preset without package"
-        )
-
-    profile = "release" if build.release else build.profile
-    artifact_name = build.package.replace("-", "_")
-    if build.wasm is None:
-        build.wasm = Path("target") / build.target / profile / f"{artifact_name}.wasm"
-    if build.out_dir is None:
-        build.out_dir = Path("target") / "palimpsest" / parser.id
-
-    generated_outputs = [
-        build.out_dir / f"{build.out_name}.js",
-        build.out_dir / f"{build.out_name}_bg.wasm",
-    ]
-    for output in generated_outputs:
-        if output not in build.outputs:
-            build.outputs.append(output)
-
-    if parser.runtime.module is None:
-        parser.runtime.module = generated_outputs[0]
-
-
-def _resolve_lezer_build(parser: ParserConfig):
-    build = parser.build
-    if not parser.grammar_files:
-        raise ValueError(f"Parser {parser.id!r} uses lezer build preset without grammar_files")
-
-    if build.grammar is None:
-        build.grammar = parser.grammar_files[0]
-    if build.out_dir is None:
-        build.out_dir = Path("target") / "palimpsest" / parser.id
-
-    generated_outputs = [
-        build.out_dir / f"{build.out_name}.generated.js",
-        build.out_dir / f"{build.out_name}.generated.terms.js",
-        build.out_dir / f"{build.out_name}.js",
-    ]
-    for output in generated_outputs:
-        if output not in build.outputs:
-            build.outputs.append(output)
-
-    if parser.runtime.module is None:
-        parser.runtime.module = generated_outputs[-1]
-    if parser.runtime.parse_export == "parse_to_json":
-        parser.runtime.parse_export = build.export_name
-
-
-def _resolve_tree_sitter_build(parser: ParserConfig):
-    build = parser.build
-    if not parser.grammar_files:
-        raise ValueError(
-            f"Parser {parser.id!r} uses tree-sitter build preset without grammar_files"
-        )
-
-    if build.grammar is None:
-        build.grammar = parser.grammar_files[0]
-    if build.out_dir is None:
-        build.out_dir = Path("target") / "palimpsest" / parser.id
-
-    generated_outputs = [
-        build.grammar.parent / "src" / "parser.c",
-        build.grammar.parent / "src" / "grammar.json",
-        build.grammar.parent / "src" / "node-types.json",
-        build.out_dir / f"{build.out_name}.wasm",
-        build.out_dir / f"{build.out_name}.js",
-        build.out_dir / "web-tree-sitter.wasm",
-    ]
-    for output in generated_outputs:
-        if output not in build.outputs:
-            build.outputs.append(output)
-
-    if parser.runtime.module is None:
-        parser.runtime.module = build.out_dir / f"{build.out_name}.js"
-    if parser.runtime.parse_export == "parse_to_json":
-        parser.runtime.parse_export = "createTreeSitterRuntime"

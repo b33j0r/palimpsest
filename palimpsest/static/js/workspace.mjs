@@ -531,8 +531,8 @@ export function createEditorWorkspaceClass(dependencies) {
       this.buildResult.hidden = false;
       this.buildResult.dataset.ok = build.ok ? "true" : "false";
       this.buildSummary.textContent = build.ok
-        ? `Build succeeded for ${build.parser} in ${build.elapsed_ms ?? "?"} ms`
-        : `Build failed for ${build.parser}`;
+        ? `Highlighter build succeeded for ${build.parser} in ${build.elapsed_ms ?? "?"} ms`
+        : `Highlighter build failed for ${build.parser}`;
 
       this.buildMeta.replaceChildren();
       for (const [label, value] of [

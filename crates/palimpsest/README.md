@@ -2,10 +2,12 @@
 
 Shared parser-runtime helpers for Palimpsest language projects.
 
-The crate currently focuses on Pest parsers that compile to WebAssembly and
-return syntax-highlight spans to the Palimpsest browser UI. A language project
+This crate is the current Rust helper for the `palimpsest highlight` subsystem.
+It keeps the existing crate name for compatibility, but conceptually it is the
+palimpsest-highlight runtime helper. It focuses on parsers that compile to
+WebAssembly and return syntax-highlight spans to Palimpsest. A language project
 owns its grammar and rule-to-capture mapping; this crate owns the JSON shape and
-span conversion expected by Palimpsest.
+span conversion expected by the workbench and highlighter pipeline.
 
 ## Runtime Contract
 
@@ -108,7 +110,7 @@ fn capture_for_rule(rule: Rule) -> Option<&'static str> {
 Only return `Some(capture)` for Pest rules that should become highlight spans.
 Silent grammar rules and structural rules can return `None`.
 
-## Build For Palimpsest
+## Build For Palimpsest Highlight
 
 Build the parser crate for wasm, then run `wasm-bindgen`:
 
@@ -121,7 +123,7 @@ wasm-bindgen \
   target/wasm32-unknown-unknown/debug/parser.wasm
 ```
 
-Then configure Palimpsest:
+Then configure Palimpsest and build through the highlighter pipeline:
 
 ```toml
 [[parsers.my_language]]
@@ -146,6 +148,11 @@ The preset derives the `wasm-bindgen` output paths and `runtime.module`.
 Use `build.command` for custom build flows that do not fit this Rust/WASM
 layout.
 
-When the Pest major mode compiles this parser, Palimpsest imports `parser.js`,
-loads the companion `.wasm`, calls `parse_to_json`, and renders matching source
-files with the returned spans.
+```sh
+palimpsest highlight check
+palimpsest highlight build my_language
+```
+
+When the workbench or CLI builds this highlighter, Palimpsest imports
+`parser.js`, loads the companion `.wasm`, calls `parse_to_json`, and renders
+matching source files with the returned spans.

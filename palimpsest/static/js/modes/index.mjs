@@ -59,7 +59,7 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
 
   compilers.register({
     id: "parser-build",
-    label: "Parser build command",
+    label: "Highlighter build command",
     compile: async (context) => {
       const buildContext = parserBuildContext(context, configuredFiletypes);
       if (!buildContext) {
@@ -72,7 +72,7 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
       const settings = parserBuildSetting(parserId);
 
       if (settings.building) {
-        workspace.editor.setStatus(`Build already running for ${parserId}.`);
+        workspace.editor.setStatus(`Highlighter build already running for ${parserId}.`);
         return null;
       }
 
@@ -86,7 +86,7 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
 
       settings.building = true;
       refreshToolbar(workspace);
-      workspace.editor.setStatus(`Building ${parserId}...`);
+      workspace.editor.setStatus(`Building highlighter ${parserId}...`);
       graph.emit("parser:build-started", { workspace, file: activeFile, parserId, runtimeId });
       let build;
       try {
@@ -95,8 +95,8 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
         workspace.showBuildResult?.(build);
         graph.emit("parser:build-finished", { workspace, file: activeFile, parserId, runtimeId, build });
         if (!build.ok) {
-          workspace.editor.setStatus(`Build failed for ${parserId}.`);
-          console.error("Palimpsest parser build failed", build);
+          workspace.editor.setStatus(`Highlighter build failed for ${parserId}.`);
+          console.error("Palimpsest highlighter build failed", build);
           graph.emit("grammar:compile-failed", { workspace, file: activeFile, build, runtimeId });
           return null;
         }
@@ -106,7 +106,7 @@ export function registerModes({ modeRegistry, fallbackHighlighters, runtimes, co
       }
 
       if (!parser.runtime?.module) {
-        workspace.editor.setStatus(`Built ${parserId}.`);
+        workspace.editor.setStatus(`Built highlighter ${parserId}.`);
         graph.emit("grammar:compiled", { workspace, file: activeFile, runtime: null, runtimeId, build });
         return build;
       }
@@ -160,7 +160,7 @@ function parserBuildToolbar(context, graph, compilers, configuredFiletypes) {
   const compileButton = document.createElement("button");
   compileButton.className = "text-button compact";
   compileButton.type = "button";
-  compileButton.textContent = settings.building ? `Building ${parserId}` : `Build ${parserId}`;
+  compileButton.textContent = settings.building ? `Building ${parserId}` : `Build highlighter`;
   compileButton.title = parser.build.command;
   compileButton.disabled = settings.building;
   compileButton.setAttribute("aria-busy", settings.building ? "true" : "false");

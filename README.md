@@ -1,9 +1,15 @@
 # Palimpsest
 
-Palimpsest is a browser workbench for developing language grammars against real
-project files. It opens a project configured with `palimpsest.toml`, shows two
-file browser/editor panes, and can load project-specific parser runtimes for
-syntax highlighting.
+Palimpsest is one package with two related use cases:
+
+- `palimpsest workbench` runs a trusted local browser workbench for developing
+  language grammars against real project files.
+- `palimpsest highlight` checks and builds browser highlighters from parsers or
+  grammars declared in `palimpsest.toml`.
+
+The default `palimpsest` command remains a shortcut for the workbench. Both
+subsystems share the same project configuration, parser runtime contract, and
+canonical examples in `./examples`.
 
 [![Palimpsest workbench screenshot](docs/ui-004.png)](https://raw.githubusercontent.com/b33j0r/palimpsest/main/docs/ui-004.png)
 
@@ -11,14 +17,14 @@ Features:
 
 - Develop grammars against project files and examples.
 - Keep source examples and grammar/parser code visible side by side.
-- Inspect project health, configured parsers, missing build tools, and runtime
-  readiness from the workbench.
-- Build Rust parser runtimes from the browser with the `cargo-wasm-bindgen`
+- Inspect project health, configured highlighters, missing build tools, and
+  runtime readiness from the workbench.
+- Build Rust highlighter runtimes from the browser or CLI with the `cargo-wasm-bindgen`
   preset.
-- Build Lezer parser runtimes from the browser with the `lezer` preset.
-- Build Tree-sitter parser runtimes from the browser with the `tree-sitter`
+- Build Lezer highlighter runtimes from the browser or CLI with the `lezer` preset.
+- Build Tree-sitter highlighter runtimes from the browser or CLI with the `tree-sitter`
   preset.
-- Review parser build commands, exit codes, stdout/stderr, elapsed time, and
+- Review highlighter build commands, exit codes, stdout/stderr, elapsed time, and
   declared outputs without opening browser developer tools.
 - Connect parser/highlighting runtimes through a small JSON token interface,
   with included Nom, Pest, Lezer, and Tree-sitter examples.
@@ -31,8 +37,8 @@ To run the workbench itself, install:
 - Python 3.13 or newer.
 - `uv`, for installing and running the Python command.
 
-The bundled examples also include Rust parser runtimes that compile to
-WebAssembly. To build those runtimes from the Palimpsest UI, install:
+The bundled examples also include Rust highlighter runtimes that compile to
+WebAssembly. To build those runtimes from the Palimpsest UI or CLI, install:
 
 - Rust and Cargo.
 - The `wasm32-unknown-unknown` Rust target.
@@ -45,8 +51,8 @@ rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli
 ```
 
-The Lezer example uses JavaScript parser tooling. To build it from the
-Palimpsest UI, install Node.js and install the repository's npm dependencies:
+The Lezer example uses JavaScript parser tooling. To build it from Palimpsest,
+install Node.js and install the repository's npm dependencies:
 
 ```sh
 npm install
@@ -57,7 +63,7 @@ Tree-sitter parser WASM through the Palimpsest UI requires whatever compiler
 tooling `tree-sitter build --wasm` needs on your platform; the CLI can download
 or use a local WASI/Emscripten toolchain.
 
-Palimpsest can still open configured example files before those parser runtimes
+Palimpsest can still open configured example files before those highlighter runtimes
 are built. Until the matching runtime loads, the custom-language examples render
 with the plain-text fallback; parser-backed highlighting begins after a
 successful build.
@@ -70,16 +76,17 @@ Install the command from a local checkout:
 uv tool install --editable .
 ```
 
-Then run the included demo from this repository:
+Then run the included workbench demo from this repository:
 
 ```sh
 uv run palimpsest
+uv run palimpsest workbench
 ```
 
 Open `http://127.0.0.1:5000`.
 
 Palimpsest is intended to run as a trusted local development tool. It can edit
-files under the configured project directory and can run parser build commands
+files under the configured project directory and can run highlighter build commands
 declared in `palimpsest.toml`. The default host is local-only; if you bind to a
 non-local address, treat the workbench as access to your project files and build
 environment.
@@ -90,6 +97,14 @@ parser file in the right pane and use its build button to compile the matching
 parser runtime. After the build succeeds, `.bet`, `.clike`, `.hask`, and
 `.talkie` files switch from the plain-text fallback to parser-backed
 highlighting.
+
+To use Palimpsest as a highlighter pipeline without opening the browser:
+
+```sh
+uv run palimpsest highlight check
+uv run palimpsest highlight build clike_nom
+uv run palimpsest highlight build --all
+```
 
 You can also run an external project that contains `palimpsest.toml`:
 
@@ -102,8 +117,12 @@ During Palimpsest development, useful command forms are:
 
 ```sh
 uv run palimpsest
+uv run palimpsest workbench
 uv run palimpsest ../example-language
 uv run palimpsest --config ../example-language/palimpsest.toml
+uv run palimpsest highlight check
+uv run palimpsest highlight build clike_nom
+uv run palimpsest highlight build --all
 ```
 
 ## Examples
@@ -123,7 +142,7 @@ Sample files:
 - `examples/observatory.talkie`, `examples/garden.talkie`, and
   `examples/vault.talkie` use Talkie, a Smalltalk-inspired demo language.
 
-Parser runtimes:
+Highlighter runtimes:
 
 - `examples/clike-nom/` implements the `.clike` runtime with Nom.
 - `examples/bet-tree-sitter/` implements the `.bet` runtime with Tree-sitter.
@@ -136,8 +155,8 @@ parser can be seen independently in the workbench.
 
 ## Project Configuration
 
-A project config declares example files, parser runtimes, and the filetypes
-that should use those parsers.
+A project config declares example files, parser/highlighter runtimes, and the
+filetypes that should use those parsers.
 
 ```toml
 examples_dir = "./examples"
@@ -168,7 +187,7 @@ parser = "my_language"
 
 `grammar_files` accepts files, directories, and glob patterns, including
 recursive patterns such as `./crates/parser/**/*.pest`. Grammar files show build
-controls when their parser has a configured build command.
+controls when their parser has a configured highlighter build command.
 
 The `cargo-wasm-bindgen` build preset expands to:
 
@@ -201,8 +220,9 @@ or:
 }
 ```
 
-The Rust crate in `crates/palimpsest` provides the shared token schema, Pest span
-helpers, and byte-range token helpers for parser runtimes.
+The Rust crate in `crates/palimpsest` is the current palimpsest-highlight
+runtime helper crate. It provides the shared token schema, Pest span helpers,
+and byte-range token helpers for parser-backed highlighter runtimes.
 
 For Lezer grammars, use the `lezer` preset:
 
@@ -244,7 +264,7 @@ emits tokens for node names present in the configured capture map.
 
 ## Highlighting
 
-Parser runtimes emit logical captures such as `keyword`, `string`,
+Parser-backed highlighter runtimes emit logical captures such as `keyword`, `string`,
 `function`, or `capture.variable`. `capture_maps` translate those captures to
 Palimpsest token classes. Dotted capture names become dash-separated CSS
 classes; for example, `punctuation.delimiter` becomes
@@ -272,10 +292,10 @@ highlighting once their parser module is available.
 
 At startup, Palimpsest imports configured runtime modules that already exist. If
 a runtime has not been built yet, the filetype remains usable with the detected
-fallback highlighter until the parser build succeeds.
+fallback highlighter until the highlighter build succeeds.
 
 The header health panel reports the loaded config, workspace path, dependency
-checks for configured build presets, parser readiness, and missing runtime
+checks for configured build presets, highlighter readiness, and missing runtime
 outputs. Build controls appear on configured grammar/parser files. Build results
 show the command, working directory, exit code, elapsed time, output files, and
 stdout/stderr. Autobuild is debounced and Palimpsest prevents duplicate builds
@@ -311,13 +331,20 @@ default URL:
 uv run palimpsest
 ```
 
+For a non-browser highlighter smoke check:
+
+```sh
+uv run palimpsest highlight check
+```
+
 ## Code Layout
 
-- `palimpsest/config.py` loads and validates `palimpsest.toml`.
-- `palimpsest/models.py` defines typed API response models.
-- `palimpsest/api.py` serves app state, directory listings, grammar discovery,
-  and file content.
-- `palimpsest/ui.py` serves the HTML shell.
+- `palimpsest/config.py` loads shared project configuration from `palimpsest.toml`.
+- `palimpsest/cli.py` implements the single `palimpsest` entrypoint.
+- `palimpsest/highlight/` owns parser/highlighter config models, build presets,
+  dependency checks, output state, and build execution.
+- `palimpsest/workbench/` owns the Flask app, typed API response models,
+  workbench routes, and HTML shell.
 - `palimpsest/static/js/app.mjs` bootstraps the browser workbench.
 - `palimpsest/static/js/core/` contains signal and registry primitives.
 - `palimpsest/static/js/highlight/` contains Highlight.js integration and local

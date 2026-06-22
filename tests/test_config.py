@@ -425,6 +425,20 @@ class BuildPresetConfigTests(unittest.TestCase):
 
         self.assertIn("uses tree-sitter build preset without grammar_files", str(error.exception))
 
+    def test_unknown_build_preset_fails(self):
+        with self.assertRaises(pydantic.ValidationError) as error:
+            ProjectConfig.model_validate({
+                "parsers": {
+                    "demo": {
+                        "build": {
+                            "preset": "missing",
+                        },
+                    },
+                },
+            })
+
+        self.assertIn("Unknown build preset 'missing'", str(error.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,2 +1,2 @@
-from palimpsest.app import main
+from palimpsest.cli import main
 main()
