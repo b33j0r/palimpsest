@@ -17,6 +17,95 @@ pub struct HighlightToken {
     pub text: String,
 }
 
+pub struct TokenSink<'a> {
+    source: &'a str,
+    tokens: Vec<HighlightToken>,
+}
+
+impl<'a> TokenSink<'a> {
+    pub fn new(source: &'a str) -> Self {
+        Self {
+            source,
+            tokens: Vec::new(),
+        }
+    }
+
+    pub fn source(&self) -> &'a str {
+        self.source
+    }
+
+    pub fn tokens(&self) -> &[HighlightToken] {
+        &self.tokens
+    }
+
+    pub fn tokens_mut(&mut self) -> &mut Vec<HighlightToken> {
+        &mut self.tokens
+    }
+
+    pub fn push_range(&mut self, capture: &str, start: usize, end: usize) {
+        push_range(self.source, capture, start, end, &mut self.tokens);
+    }
+
+    pub fn push_char_between(&mut self, capture: &str, needle: char, start: usize, end: usize) {
+        push_char_between(self.source, capture, needle, start, end, &mut self.tokens);
+    }
+
+    pub fn push_char_between_rev(&mut self, capture: &str, needle: char, start: usize, end: usize) {
+        push_char_between_rev(self.source, capture, needle, start, end, &mut self.tokens);
+    }
+
+    pub fn push_char_before(&mut self, capture: &str, needle: char, end: usize, floor: usize) {
+        push_char_before(self.source, capture, needle, end, floor, &mut self.tokens);
+    }
+
+    pub fn push_char_after(&mut self, capture: &str, needle: char, start: usize, ceiling: usize) {
+        push_char_after(
+            self.source,
+            capture,
+            needle,
+            start,
+            ceiling,
+            &mut self.tokens,
+        );
+    }
+
+    pub fn push_char_at_or_before(
+        &mut self,
+        capture: &str,
+        needle: char,
+        end: usize,
+        floor: usize,
+    ) {
+        push_char_at_or_before(self.source, capture, needle, end, floor, &mut self.tokens);
+    }
+
+    pub fn push_char_at_or_after(
+        &mut self,
+        capture: &str,
+        needle: char,
+        start: usize,
+        ceiling: usize,
+    ) {
+        push_char_at_or_after(
+            self.source,
+            capture,
+            needle,
+            start,
+            ceiling,
+            &mut self.tokens,
+        );
+    }
+
+    pub fn sort_and_dedupe(&mut self) {
+        sort_and_dedupe(&mut self.tokens);
+    }
+
+    pub fn into_tokens(mut self) -> Vec<HighlightToken> {
+        self.sort_and_dedupe();
+        self.tokens
+    }
+}
+
 pub fn pest_tokens<R, F>(
     source: &str,
     pairs: Pairs<'_, R>,
@@ -273,6 +362,7 @@ fn push_pest_punctuation<R>(
                 punctuation.capture,
                 punctuation.ch,
                 span.start(),
+                0,
                 tokens,
             ),
             PestPunctuationPosition::After => push_char_after(
@@ -280,13 +370,14 @@ fn push_pest_punctuation<R>(
                 punctuation.capture,
                 punctuation.ch,
                 span.end(),
+                source.len(),
                 tokens,
             ),
         }
     }
 }
 
-fn push_char_between(
+pub fn push_char_between(
     source: &str,
     capture: &str,
     needle: char,
@@ -294,6 +385,12 @@ fn push_char_between(
     end: usize,
     tokens: &mut Vec<HighlightToken>,
 ) {
+    let start = start.min(source.len());
+    let end = end.min(source.len());
+    if start > end || !source.is_char_boundary(start) || !source.is_char_boundary(end) {
+        return;
+    }
+
     for (offset, ch) in source[start..end].char_indices() {
         if ch == needle {
             let token_start = start + offset;
@@ -309,7 +406,7 @@ fn push_char_between(
     }
 }
 
-fn push_char_between_rev(
+pub fn push_char_between_rev(
     source: &str,
     capture: &str,
     needle: char,
@@ -317,6 +414,12 @@ fn push_char_between_rev(
     end: usize,
     tokens: &mut Vec<HighlightToken>,
 ) {
+    let start = start.min(source.len());
+    let end = end.min(source.len());
+    if start > end || !source.is_char_boundary(start) || !source.is_char_boundary(end) {
+        return;
+    }
+
     for (offset, ch) in source[start..end].char_indices().rev() {
         if ch == needle {
             let token_start = start + offset;
@@ -332,16 +435,39 @@ fn push_char_between_rev(
     }
 }
 
-fn push_char_before(
+pub fn push_char_at_or_before(
     source: &str,
     capture: &str,
     needle: char,
     end: usize,
+    floor: usize,
     tokens: &mut Vec<HighlightToken>,
 ) {
-    for (offset, ch) in source[..end].char_indices().rev() {
+    if end <= source.len() && source.is_char_boundary(end) && source[end..].starts_with(needle) {
+        push_range(source, capture, end, end + needle.len_utf8(), tokens);
+        return;
+    }
+    push_char_before(source, capture, needle, end, floor, tokens);
+}
+
+pub fn push_char_before(
+    source: &str,
+    capture: &str,
+    needle: char,
+    end: usize,
+    floor: usize,
+    tokens: &mut Vec<HighlightToken>,
+) {
+    let end = end.min(source.len());
+    let floor = floor.min(end);
+    if !source.is_char_boundary(floor) || !source.is_char_boundary(end) {
+        return;
+    }
+
+    for (relative_index, ch) in source[floor..end].char_indices().rev() {
         if ch == needle {
-            push_range(source, capture, offset, offset + ch.len_utf8(), tokens);
+            let start = floor + relative_index;
+            push_range(source, capture, start, start + ch.len_utf8(), tokens);
             return;
         }
         if !ch.is_whitespace() {
@@ -350,14 +476,32 @@ fn push_char_before(
     }
 }
 
-fn push_char_after(
+pub fn push_char_at_or_after(
     source: &str,
     capture: &str,
     needle: char,
     start: usize,
+    ceiling: usize,
     tokens: &mut Vec<HighlightToken>,
 ) {
-    for (offset, ch) in source[start..].char_indices() {
+    push_char_after(source, capture, needle, start, ceiling, tokens);
+}
+
+pub fn push_char_after(
+    source: &str,
+    capture: &str,
+    needle: char,
+    start: usize,
+    ceiling: usize,
+    tokens: &mut Vec<HighlightToken>,
+) {
+    let start = start.min(source.len());
+    let ceiling = ceiling.min(source.len());
+    if start > ceiling || !source.is_char_boundary(start) || !source.is_char_boundary(ceiling) {
+        return;
+    }
+
+    for (offset, ch) in source[start..ceiling].char_indices() {
         if ch == needle {
             let token_start = start + offset;
             push_range(
@@ -375,19 +519,23 @@ fn push_char_after(
     }
 }
 
-fn push_range(
+pub fn push_range(
     source: &str,
     capture: &str,
     start: usize,
     end: usize,
     tokens: &mut Vec<HighlightToken>,
 ) {
-    if start < end && end <= source.len() {
+    if start < end
+        && end <= source.len()
+        && source.is_char_boundary(start)
+        && source.is_char_boundary(end)
+    {
         tokens.push(token_from_byte_range(source, capture, start, end));
     }
 }
 
-fn sort_and_dedupe(tokens: &mut Vec<HighlightToken>) {
+pub fn sort_and_dedupe(tokens: &mut Vec<HighlightToken>) {
     tokens.sort_by(|left, right| {
         (left.start, left.end, left.capture.as_str()).cmp(&(
             right.start,
@@ -466,5 +614,32 @@ mod tests {
         assert_eq!(token.end_col, 2);
         assert_eq!(token.start_utf16, 4);
         assert_eq!(token.end_utf16, 6);
+    }
+
+    #[test]
+    fn token_sink_collects_ranges_and_bounded_punctuation() {
+        let mut tokens = TokenSink::new("[greet _name] { done = true }");
+
+        tokens.push_range("handler", 1, 6);
+        tokens.push_char_before("punctuation.bracket", '[', 1, 0);
+        tokens.push_char_after("punctuation.bracket", ']', 12, 13);
+        tokens.push_char_at_or_after("punctuation.bracket", '{', 14, 16);
+        tokens.push_range("handler", 1, 6);
+
+        let captures: Vec<_> = tokens
+            .into_tokens()
+            .into_iter()
+            .map(|token| (token.capture, token.text))
+            .collect();
+
+        assert_eq!(
+            captures,
+            vec![
+                ("punctuation.bracket".to_string(), "[".to_string()),
+                ("handler".to_string(), "greet".to_string()),
+                ("punctuation.bracket".to_string(), "]".to_string()),
+                ("punctuation.bracket".to_string(), "{".to_string()),
+            ]
+        );
     }
 }

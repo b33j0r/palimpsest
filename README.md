@@ -220,9 +220,11 @@ or:
 }
 ```
 
-The Rust crate in `crates/palimpsest` is the current palimpsest-highlight
-runtime helper crate. It provides the shared token schema, Pest span helpers,
-and byte-range token helpers for parser-backed highlighter runtimes.
+The Rust crate in `crates/palimpsest` is the reusable Palimpsest highlighting
+SDK. It provides the shared token schema, JSON runtime contract, Pest span
+helpers, byte-range token helpers, and `TokenSink` for AST-backed highlighters
+that need to emit tokens for CLIs, servers, tests, editors, or the Palimpsest
+workbench.
 
 For Lezer grammars, use the `lezer` preset:
 

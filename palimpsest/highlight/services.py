@@ -57,6 +57,9 @@ def path_health(
     project_relative: bool = True,
 ) -> dict[str, Any]:
     target = config.resolve_project_path(path) if project_relative else Path(path).resolve()
+    if _has_glob(target):
+        return glob_path_health(config, target, expected=expected)
+
     exists = target.exists()
     if expected == "directory":
         ok = target.is_dir()
@@ -77,6 +80,48 @@ def path_health(
         "exists": exists,
         "expected": expected,
     }
+
+
+def glob_path_health(config: Config, target: Path, *, expected: str) -> dict[str, Any]:
+    root = _glob_root(target)
+    pattern = target.relative_to(root).as_posix()
+    matches = sorted(root.glob(pattern), key=lambda path: path.as_posix().casefold())
+
+    if expected == "directory":
+        ok = bool(matches) and all(path.is_dir() for path in matches)
+    elif expected == "file":
+        ok = bool(matches) and all(path.is_file() for path in matches)
+    else:
+        ok = bool(matches)
+
+    try:
+        relative_path = config.relative_to_cwd(target)
+    except ValueError:
+        relative_path = target.as_posix()
+
+    return {
+        "ok": ok,
+        "path": relative_path,
+        "absolute_path": target.as_posix(),
+        "exists": bool(matches),
+        "expected": expected,
+        "matches": [path.as_posix() for path in matches],
+    }
+
+
+def _has_glob(path: Path) -> bool:
+    return any(char in path.as_posix() for char in "*?[")
+
+
+def _glob_root(path: Path) -> Path:
+    root_parts = []
+    for part in path.parts:
+        if any(char in part for char in "*?["):
+            break
+        root_parts.append(part)
+    if not root_parts:
+        return Path(".")
+    return Path(*root_parts)
 
 
 def dependency_checks(config: Config) -> list[dict[str, Any]]:

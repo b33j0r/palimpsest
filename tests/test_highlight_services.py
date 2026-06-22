@@ -67,6 +67,28 @@ class HighlightServiceTests(unittest.TestCase):
         self.assertFalse(health["ok"])
         self.assertFalse(health["parsers"][0]["runtime"]["ok"])
 
+    def test_project_highlight_health_accepts_grammar_globs(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            (root / "src").mkdir()
+            (root / "src" / "parser.rs").write_text("fn parser() {}\n")
+            config = Config(
+                cwd=root,
+                project=ProjectConfig.model_validate({
+                    "parsers": {
+                        "demo": {
+                            "grammar_files": ["src/**/*.rs"],
+                        },
+                    },
+                }),
+            )
+
+            health = project_highlight_health(config)
+
+        self.assertTrue(health["ok"])
+        self.assertTrue(health["parsers"][0]["grammar_files"][0]["ok"])
+        self.assertEqual(len(health["parsers"][0]["grammar_files"][0]["matches"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
